@@ -480,6 +480,36 @@ run_test "Doctor Admits Patient" "POST" "/video/session/$APPOINTMENT_ID/admit/$P
 # Start screen sharing
 run_test "Start Screen Sharing" "POST" "/video/session/$APPOINTMENT_ID/screen-sharing" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,APPOINTMENT_ID"
 
+# ======================= ENHANCED ENCRYPTION TESTS =======================
+echo -e "${YELLOW}=== Enhanced End-to-End Encryption Tests ===${NC}"
+
+# Create encrypted conversation with E2EE key exchange
+run_test "Create Fully Encrypted Conversation" "POST" "/chats" '{"participants":["'$PATIENT_ID'","'$DOCTOR_ID'"],"subject":"E2EE medical consultation","e2eeEnabled":true}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,PATIENT_ID,DOCTOR_ID"
+
+# Send a message with explicit encryption
+run_test "Send Explicitly Encrypted Message" "POST" "/chats/$CONVERSATION_ID/messages" '{"content":"This is a highly confidential test message","encryptionMetadata":{"algorithm":"AES-256-GCM","keyId":"test-key-1"}}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Check message decryption with valid recipient
+run_test "Decrypt Message As Valid Recipient" "GET" "/chats/$CONVERSATION_ID/messages" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,CONVERSATION_ID"
+
+# ======================= ADVANCED DIALOGFLOW TESTS =======================
+echo -e "${YELLOW}=== Advanced Dialogflow AI Tests ===${NC}"
+
+# Test medical symptom analysis with Dialogflow
+run_test "AI Medical Symptom Analysis" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"I have had chest pain and shortness of breath for 3 days"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Test appointment intent recognition
+run_test "AI Appointment Intent Recognition" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"Can I schedule an appointment for next Tuesday?"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Test conversation context maintenance
+run_test "AI Conversation Context Maintenance" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"What time is available?"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Test medical term explanation
+run_test "AI Medical Term Explanation" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"What is hypertension?"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Test urgent symptom detection
+run_test "AI Urgent Symptom Detection" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"I am experiencing severe chest pain radiating to my left arm and jaw"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
 # ======================= CLEANUP =======================
 # Delete appointment to clean up
 run_test "Delete Appointment" "DELETE" "/appointments/$APPOINTMENT_ID" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,APPOINTMENT_ID"

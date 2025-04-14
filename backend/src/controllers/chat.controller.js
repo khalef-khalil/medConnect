@@ -413,7 +413,7 @@ exports.markMessagesAsRead = async (req, res) => {
 exports.getAIResponse = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { message } = req.body;
+    const { message, context } = req.body;
     const { userId, role } = req.user;
 
     if (!message) {
@@ -444,8 +444,13 @@ exports.getAIResponse = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to access this conversation' });
     }
 
-    // Get AI response from Dialogflow
-    const aiResponseData = await dialogflowService.detectIntent(message);
+    // Get AI response from Dialogflow - pass the userId for session management
+    const aiResponseData = await dialogflowService.detectIntent(message, userId, context || {});
+    
+    logger.info(`Dialogflow response for user ${userId}: Intent=${aiResponseData.intent}, Confidence=${aiResponseData.intentConfidence}`);
+    
+    // Get intent information for special handling
+    const intentInfo = dialogflowService.getHealthcareIntentInfo(aiResponseData.intent);
     
     // Create a message ID for the AI response
     const messageId = uuidv4();
@@ -457,6 +462,26 @@ exports.getAIResponse = async (req, res) => {
     // Encrypt the AI response
     const encryptedResponse = encryptionService.encryptMessage(aiResponseData.response, encryptionKey);
     
+    // Additional metadata to store with the message
+    const metadata = {
+      intent: aiResponseData.intent,
+      intentConfidence: aiResponseData.intentConfidence,
+      intentCategory: intentInfo.category,
+      intentPriority: intentInfo.priority,
+      requiresFollowUp: intentInfo.requiresFollowUp || false
+    };
+    
+    // If there are parameters, add them to metadata
+    if (aiResponseData.parameters && Object.keys(aiResponseData.parameters).length > 0) {
+      // Encrypt parameters before storage for security
+      const encryptedParams = encryptionService.encryptMessage(
+        JSON.stringify(aiResponseData.parameters), 
+        encryptionKey
+      );
+      metadata.parameters = encryptedParams;
+      metadata.hasParameters = true;
+    }
+    
     // Create the AI response message
     const aiMessage = {
       messageId,
@@ -466,7 +491,7 @@ exports.getAIResponse = async (req, res) => {
       content: encryptedResponse,
       isEncrypted: true,
       isAIGenerated: true,
-      intent: aiResponseData.intent,
+      metadata: metadata,
       originalLength: aiResponseData.response.length,
       timestamp,
       createdAt: new Date().toISOString(),
@@ -479,21 +504,47 @@ exports.getAIResponse = async (req, res) => {
       Item: aiMessage
     }).promise();
     
-    // Send notifications to all participants
-    for (const participantId of participantIds) {
-      if (participantId !== userId) {
-        try {
-          await notifyMessage(participantId, {
-            ...aiMessage,
-            content: 'New AI message available',
-            senderName: 'MedConnect Assistant'
-          });
-        } catch (notifyError) {
-          logger.error(`Error sending AI message notification to user ${participantId}:`, notifyError);
+    // Handle high priority intents with notifications
+    if (intentInfo.priority === 'HIGH') {
+      for (const participantId of participantIds) {
+        // For doctors, send urgent notification
+        const userParams = {
+          TableName: TABLES.USERS,
+          Key: { userId: participantId }
+        };
+        
+        const userResult = await dynamoDB.get(userParams).promise();
+        if (userResult.Item && userResult.Item.role === 'doctor') {
+          try {
+            await notifyMessage(participantId, {
+              ...aiMessage,
+              content: 'URGENT: Patient reported emergency symptoms',
+              senderName: 'MedConnect Assistant',
+              priority: 'HIGH'
+            });
+          } catch (notifyError) {
+            logger.error(`Error sending urgent AI notification to doctor ${participantId}:`, notifyError);
+          }
+        }
+      }
+    } else {
+      // Send regular notifications to all participants except the requester
+      for (const participantId of participantIds) {
+        if (participantId !== userId) {
+          try {
+            await notifyMessage(participantId, {
+              ...aiMessage,
+              content: 'New AI message available',
+              senderName: 'MedConnect Assistant'
+            });
+          } catch (notifyError) {
+            logger.error(`Error sending AI message notification to user ${participantId}:`, notifyError);
+          }
         }
       }
     }
     
+    // Return response to the user
     res.status(201).json({
       message: 'AI response generated successfully',
       messageDetails: {
@@ -502,10 +553,14 @@ exports.getAIResponse = async (req, res) => {
         senderId: 'AI_ASSISTANT',
         content: aiResponseData.response, // Return plaintext for immediate display
         intent: aiResponseData.intent,
+        intentConfidence: aiResponseData.intentConfidence,
+        intentCategory: intentInfo.category,
+        intentPriority: intentInfo.priority,
         isAIGenerated: true,
         isEncrypted: true,
         timestamp: new Date(timestamp).toISOString(),
         createdAt: new Date().toISOString(),
+        parameters: aiResponseData.parameters || {},
         read: false
       }
     });

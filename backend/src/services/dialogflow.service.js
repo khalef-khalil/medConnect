@@ -1,118 +1,148 @@
 const { logger } = require('../utils/logger');
+const dialogflow = require('@google-cloud/dialogflow');
+const { v4: uuidv4 } = require('uuid');
+const { struct } = require('pb-util');
 
-// In a real implementation, this would use the Dialogflow client library
-// For this implementation, we'll simulate Dialogflow responses
-
-// Define common medical intents and responses
-const MEDICAL_INTENTS = {
-  GREETING: {
-    patterns: ['hi', 'hello', 'hey', 'greetings'],
-    responses: [
-      'Hello! How can I assist you with your healthcare today?',
-      'Hi there! Do you have a medical question I can help with?',
-      'Greetings! How can MedConnect assist you today?'
-    ]
-  },
-  APPOINTMENT: {
-    patterns: ['appointment', 'schedule', 'book', 'visit', 'consultation'],
-    responses: [
-      'Would you like to schedule a new appointment? You can use our appointment system to find available slots.',
-      'We can help you schedule an appointment. What day and time works best for you?',
-      'For appointments, please use the appointment scheduling feature or let me know when you would prefer to see the doctor.'
-    ]
-  },
-  SYMPTOMS: {
-    patterns: ['symptom', 'pain', 'fever', 'cough', 'headache', 'hurt', 'sick', 'feel', 'unwell'],
-    responses: [
-      'I understand you are not feeling well. Can you describe your symptoms in more detail so we can better assist you?',
-      'I am sorry to hear you are experiencing symptoms. This platform allows you to discuss them securely with your doctor.',
-      'Your doctor will need more details about these symptoms. Please describe when they started and their severity.'
-    ]
-  },
-  MEDICATION: {
-    patterns: ['medicine', 'drug', 'prescription', 'pill', 'medication', 'refill'],
-    responses: [
-      'Do you need information about your medication or a prescription refill?',
-      'For medication questions, it is best to consult directly with your doctor through our secure messaging.',
-      'Your doctor can address medication concerns during your next appointment or via secure message.'
-    ]
-  },
-  EMERGENCY: {
-    patterns: ['emergency', 'urgent', 'severe', 'critical', '911', 'ambulance', 'ER', 'help'],
-    responses: [
-      'If this is a medical emergency, please call 911 or your local emergency number immediately instead of using this platform.',
-      'For medical emergencies, please contact emergency services right away by calling 911.',
-      'This platform is not designed for emergency care. Please call 911 or go to your nearest emergency room immediately.'
-    ]
-  },
-  INSURANCE: {
-    patterns: ['insurance', 'coverage', 'pay', 'cost', 'bill', 'payment'],
-    responses: [
-      'For insurance and billing questions, please contact our administrative staff through the payment section.',
-      'I can help direct you to payment information. Would you like to review your coverage or recent bills?',
-      'Insurance questions can be addressed by our administrative team during business hours.'
-    ]
-  },
-  RESULTS: {
-    patterns: ['result', 'test', 'lab', 'scan', 'diagnosis', 'report'],
-    responses: [
-      'Your test results will be reviewed by your doctor and shared with you securely once available.',
-      'Test results are typically reviewed and shared by your doctor within 2-3 business days after they are received.',
-      'Your doctor will discuss any test results with you during your next appointment or via secure message.'
-    ]
-  },
-  GENERAL_ADVICE: {
-    patterns: ['advice', 'help', 'information', 'understand', 'explain', 'what should', 'should I'],
-    responses: [
-      'I can provide general information, but for personalized medical advice, please consult with your healthcare provider.',
-      'Your doctor can provide specific medical guidance for your situation through our secure platform.',
-      'General health questions can be discussed during your appointment. Is there something specific you would like to know?'
-    ]
-  },
-  FALLBACK: {
-    responses: [
-      'I am not quite sure how to help with that. Could you rephrase or provide more details?',
-      'That is beyond my current capabilities. Your healthcare provider can address this during your appointment.',
-      'I apologize, but I do not have enough information to assist with that. Please message your doctor directly for specific questions.'
-    ]
-  }
-};
+// Cache for Dialogflow sessions to maintain context
+const sessionCache = new Map();
 
 /**
- * Detect the intent of a user message and generate a response
+ * Create or retrieve a Dialogflow session
+ * @param {string} userId - User ID
+ * @returns {string} - Dialogflow session ID
+ */
+function getDialogflowSession(userId) {
+  if (!sessionCache.has(userId)) {
+    // Create a new session with a unique ID
+    const sessionId = `medconnect-${userId}-${uuidv4()}`;
+    sessionCache.set(userId, sessionId);
+    return sessionId;
+  }
+  
+  return sessionCache.get(userId);
+}
+
+/**
+ * Initialize the Dialogflow client
+ * @returns {Object} - The Dialogflow session client
+ */
+function createDialogflowClient() {
+  // Create a new session client
+  const sessionClient = new dialogflow.SessionsClient({
+    credentials: JSON.parse(process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON),
+    projectId: process.env.DIALOGFLOW_PROJECT_ID
+  });
+  
+  return sessionClient;
+}
+
+/**
+ * Detect the intent of a user message and generate a response using Dialogflow
  * @param {string} message - The user's message
+ * @param {string} userId - The user's ID
+ * @param {Object} [context] - Optional context data for Dialogflow
  * @returns {Promise<Object>} - The detected intent and response
  */
-exports.detectIntent = async (message) => {
+exports.detectIntent = async (message, userId, context = {}) => {
   try {
     if (!message) {
       return {
         intent: 'FALLBACK',
-        response: getRandomResponse(MEDICAL_INTENTS.FALLBACK.responses)
+        response: 'I didn\'t receive any message. How can I help you?'
       };
     }
     
-    // Normalize message for intent detection
-    const normalizedMessage = message.toLowerCase().trim();
+    // Get or create a session ID for this user
+    const sessionId = getDialogflowSession(userId);
     
-    // Find matching intent
-    for (const [intent, data] of Object.entries(MEDICAL_INTENTS)) {
-      // Skip FALLBACK as it's our default
-      if (intent === 'FALLBACK') continue;
-      
-      // Check if message matches any patterns for this intent
-      if (data.patterns && data.patterns.some(pattern => normalizedMessage.includes(pattern))) {
-        return {
-          intent,
-          response: getRandomResponse(data.responses)
-        };
+    // Initialize the Dialogflow client
+    const sessionClient = createDialogflowClient();
+    
+    // Format the session path
+    const sessionPath = sessionClient.projectAgentSessionPath(
+      process.env.DIALOGFLOW_PROJECT_ID,
+      sessionId
+    );
+    
+    // Prepare the request for Dialogflow
+    const request = {
+      session: sessionPath,
+      queryInput: {
+        text: {
+          text: message,
+          languageCode: 'en-US',
+        },
+      },
+    };
+    
+    // Add any context parameters if provided
+    if (Object.keys(context).length > 0) {
+      request.queryParams = {
+        payload: struct.encode(context)
+      };
+    }
+    
+    logger.info(`Sending message to Dialogflow: "${message.substring(0, 50)}${message.length > 50 ? '...' : ''}" for user ${userId}`);
+    
+    // Send the request to Dialogflow
+    const [response] = await sessionClient.detectIntent(request);
+    
+    // Extract the detected intent
+    const result = response.queryResult;
+    const intentName = result.intent ? result.intent.displayName : 'FALLBACK';
+    const intentConfidence = result.intentDetectionConfidence;
+    
+    logger.info(`Dialogflow intent detected: ${intentName} (confidence: ${intentConfidence})`);
+    
+    // Extract parameters
+    const parameters = struct.decode(result.parameters);
+    
+    // Extract fulfillment messages
+    let responseMessages = [];
+    if (result.fulfillmentMessages && result.fulfillmentMessages.length > 0) {
+      for (const msg of result.fulfillmentMessages) {
+        if (msg.text && msg.text.text && msg.text.text.length > 0) {
+          responseMessages = responseMessages.concat(msg.text.text);
+        }
       }
     }
     
-    // If no intent was matched, return fallback
+    // If no fulfillment messages, use the fulfillment text
+    if (responseMessages.length === 0 && result.fulfillmentText) {
+      responseMessages.push(result.fulfillmentText);
+    }
+    
+    // Get a single response message
+    const responseMessage = getResponseMessage(responseMessages);
+    
+    // Check for custom payloads
+    let payload = null;
+    if (result.fulfillmentMessages) {
+      for (const msg of result.fulfillmentMessages) {
+        if (msg.payload) {
+          payload = struct.decode(msg.payload);
+          break;
+        }
+      }
+    }
+    
+    // Return the response
     return {
-      intent: 'FALLBACK',
-      response: getRandomResponse(MEDICAL_INTENTS.FALLBACK.responses)
+      intent: intentName,
+      intentConfidence,
+      response: responseMessage,
+      parameters,
+      payload,
+      queryText: result.queryText,
+      allResponses: responseMessages,
+      fulfillmentText: result.fulfillmentText,
+      // Only include diagnostics in development
+      diagnostics: process.env.NODE_ENV === 'development' ? {
+        sessionId,
+        languageCode: result.languageCode,
+        intentDetected: !!result.intent,
+        allIntents: result.allRequiredParamsPresent
+      } : undefined
     };
   } catch (error) {
     logger.error('Error in detectIntent function:', error);
@@ -126,11 +156,87 @@ exports.detectIntent = async (message) => {
 };
 
 /**
- * Get a random response from an array of possible responses
+ * Get a response message from an array of possible responses
  * @param {Array} responses - Array of possible responses
- * @returns {string} - A random response
+ * @returns {string} - A response message
  */
-function getRandomResponse(responses) {
+function getResponseMessage(responses) {
+  if (!responses || responses.length === 0) {
+    return 'I apologize, but I don\'t have a response for that.';
+  }
+  
+  // If only one response, return it
+  if (responses.length === 1) {
+    return responses[0];
+  }
+  
+  // Otherwise, get a random response
   const index = Math.floor(Math.random() * responses.length);
   return responses[index];
-} 
+}
+
+/**
+ * Create a context for a follow-up query
+ * @param {string} intentName - Name of the intent to target
+ * @param {Object} parameters - Parameters to include
+ * @returns {Object} - Context object for Dialogflow
+ */
+exports.createContext = (intentName, parameters = {}) => {
+  return {
+    intentName,
+    parameters
+  };
+};
+
+/**
+ * Clear the session for a user
+ * @param {string} userId - The user's ID
+ */
+exports.clearSession = (userId) => {
+  if (sessionCache.has(userId)) {
+    sessionCache.delete(userId);
+    logger.info(`Cleared Dialogflow session for user ${userId}`);
+  }
+};
+
+/**
+ * Get healthcare-specific intents that may require special handling
+ * @param {string} intent - The detected intent name
+ * @returns {Object} - Information about the intent
+ */
+exports.getHealthcareIntentInfo = (intent) => {
+  const medicalIntents = {
+    'medical.symptoms': {
+      category: 'MEDICAL',
+      priority: 'MEDIUM',
+      requiresFollowUp: true
+    },
+    'medical.emergency': {
+      category: 'MEDICAL',
+      priority: 'HIGH',
+      requiresFollowUp: true,
+      emergencyContact: true
+    },
+    'appointment.schedule': {
+      category: 'ADMINISTRATIVE',
+      priority: 'LOW',
+      redirectToAppointmentSystem: true
+    },
+    'appointment.reschedule': {
+      category: 'ADMINISTRATIVE',
+      priority: 'LOW',
+      redirectToAppointmentSystem: true
+    },
+    'payment.info': {
+      category: 'ADMINISTRATIVE',
+      priority: 'LOW',
+      redirectToPaymentSystem: true
+    }
+  };
+  
+  return medicalIntents[intent] || {
+    category: 'GENERAL',
+    priority: 'LOW',
+    requiresFollowUp: false
+  };
+}; 
