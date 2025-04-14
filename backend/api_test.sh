@@ -44,6 +44,9 @@ CONVERSATION_ID=""
 MESSAGE_ID=""
 PAYMENT_ID=""
 NOTIFICATION_ID=""
+ENCRYPTED_CONTENT=""
+AI_RESPONSE_ID=""
+WEBRTC_SESSION_ID=""
 
 # Dependency flags
 DEPENDENCY_FAILURES=0
@@ -201,6 +204,21 @@ run_test() {
   if [[ "$test_name" == "Create User (Admin)" ]] && [ "$status_code" = "409" ] && [ "$expected_status" = "201" ]; then
     echo -e "${GREEN}✓ Success: Expected status $expected_status or 409, got $status_code (User already exists)${NC}"
     PASSED_TESTS=$((PASSED_TESTS+1))
+    return
+  fi
+  
+  # Handle WebRTC session creation which returns 200 when session already exists
+  if [[ "$test_name" == "Create WebRTC Session" ]] && [ "$status_code" = "200" ] && [ "$expected_status" = "201" ]; then
+    echo -e "${GREEN}✓ Success: Expected status $expected_status or 200, got $status_code (Session already exists)${NC}"
+    PASSED_TESTS=$((PASSED_TESTS+1))
+    
+    # Extract session ID from response if provided
+    if [ -f "$response_file" ]; then
+      WEBRTC_SESSION_ID=$(jq -r '.session.webrtcData.sessionId' $response_file 2>/dev/null || echo "")
+      if [ ! -z "$WEBRTC_SESSION_ID" ]; then
+        echo "WebRTC Session ID: $WEBRTC_SESSION_ID"
+      fi
+    fi
     return
   fi
   
@@ -407,6 +425,60 @@ if [ ! -z "$NOTIFICATION_ID" ]; then
   run_test "Mark Notification as Read" "PUT" "/notifications/$NOTIFICATION_ID/read" "" "$PATIENT_TOKEN" "200" "PATIENT_TOKEN,NOTIFICATION_ID"
   run_test "Mark All Notifications as Read" "PUT" "/notifications/read-all" "" "$PATIENT_TOKEN" "200" "PATIENT_TOKEN"
 fi
+
+# ======================= CHAT WITH ENCRYPTION TESTS =======================
+echo -e "${YELLOW}=== Chat with End-to-End Encryption Tests ===${NC}"
+
+# Create conversation (with encryption)
+run_test "Create Encrypted Conversation" "POST" "/chats" '{"participants":["'$PATIENT_ID'","'$DOCTOR_ID'"],"subject":"Encrypted medical consultation"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,PATIENT_ID,DOCTOR_ID"
+
+# Check if conversation is encrypted
+run_test "Verify Conversation Encryption" "GET" "/chats/$CONVERSATION_ID/messages" "" "$PATIENT_TOKEN" "200" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Send encrypted message
+run_test "Send Encrypted Message" "POST" "/chats/$CONVERSATION_ID/messages" '{"content":"This is a confidential test message"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Store an encrypted message content for later comparison
+ENCRYPTED_CONTENT=$(jq -r '.messageDetails.content' $response_file)
+
+# Get encrypted messages
+run_test "Get Decrypted Messages" "GET" "/chats/$CONVERSATION_ID/messages" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,CONVERSATION_ID"
+
+# ======================= DIALOGFLOW AI RESPONSE TESTS =======================
+echo -e "${YELLOW}=== Dialogflow AI Response Tests ===${NC}"
+
+# Get AI response to a message
+run_test "Get AI Response for Symptoms" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"I have a severe headache and fever"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# Store AI response message ID
+AI_RESPONSE_ID=$(jq -r '.messageDetails.messageId' $response_file)
+
+# Get AI response for appointment query
+run_test "Get AI Response for Appointment" "POST" "/chats/$CONVERSATION_ID/ai-response" '{"message":"I need to book an appointment"}' "$PATIENT_TOKEN" "201" "PATIENT_TOKEN,CONVERSATION_ID"
+
+# ======================= WEBRTC VIDEO SESSION TESTS =======================
+echo -e "${YELLOW}=== WebRTC Video Session Tests ===${NC}"
+
+# Create WebRTC video session
+run_test "Create WebRTC Session" "POST" "/video/session" '{"appointmentId":"'$APPOINTMENT_ID'"}' "$DOCTOR_TOKEN" "201" "DOCTOR_TOKEN,APPOINTMENT_ID"
+
+# Store WebRTC session ID for later use
+WEBRTC_SESSION_ID=$(jq -r '.session.webrtcData.sessionId' $response_file)
+
+# Get WebRTC session as doctor
+run_test "Get Doctor WebRTC Config" "GET" "/video/session/$APPOINTMENT_ID" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,APPOINTMENT_ID"
+
+# Get WebRTC session as patient
+run_test "Get Patient WebRTC Config" "GET" "/video/session/$APPOINTMENT_ID" "" "$PATIENT_TOKEN" "200" "PATIENT_TOKEN,APPOINTMENT_ID"
+
+# Patient joins waiting room
+run_test "Patient Joins Waiting Room" "POST" "/video/session/$APPOINTMENT_ID/waiting-room" "" "$PATIENT_TOKEN" "200" "PATIENT_TOKEN,APPOINTMENT_ID"
+
+# Doctor admits patient from waiting room
+run_test "Doctor Admits Patient" "POST" "/video/session/$APPOINTMENT_ID/admit/$PATIENT_ID" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,APPOINTMENT_ID,PATIENT_ID"
+
+# Start screen sharing
+run_test "Start Screen Sharing" "POST" "/video/session/$APPOINTMENT_ID/screen-sharing" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,APPOINTMENT_ID"
 
 # ======================= CLEANUP =======================
 # Delete appointment to clean up

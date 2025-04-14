@@ -19,6 +19,9 @@ router.get('/:conversationId/messages', chatController.getMessages);
 router.post('/:conversationId/messages', chatController.sendMessage);
 
 // Mark messages as read
-router.put('/:conversationId/read', chatController.markAsRead);
+router.put('/:conversationId/read', chatController.markMessagesAsRead);
+
+// Get AI response to a message
+router.post('/:conversationId/ai-response', chatController.getAIResponse);
 
 module.exports = router; 

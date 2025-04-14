@@ -2,6 +2,9 @@ const { v4: uuidv4 } = require('uuid');
 const { dynamoDB, TABLES } = require('../config/aws');
 const { logger } = require('../utils/logger');
 const { notifyMessage } = require('../services/notification.service');
+const encryptionService = require('../services/encryption.service');
+const encryptionKeyService = require('../services/encryption-key.service');
+const dialogflowService = require('../services/dialogflow.service');
 
 /**
  * Get all conversations for the current user
@@ -49,7 +52,8 @@ exports.getConversations = async (req, res) => {
           conversations[message.conversationId].lastMessage = {
             messageId: message.messageId,
             senderId: message.senderId,
-            content: message.content,
+            content: message.content, // This will be encrypted but we don't decrypt in the list view
+            isEncrypted: message.isEncrypted || false,
             timestamp: message.timestamp
           };
           
@@ -108,6 +112,12 @@ exports.createConversation = async (req, res) => {
     const conversationId = uuidv4();
     const messageId = uuidv4();
     const timestamp = Date.now();
+    
+    // Create encryption key for the conversation
+    const encryptionKey = await encryptionKeyService.ensureEncryptionKey(conversationId, participantIds);
+    
+    // Encrypt the initial subject message
+    const encryptedContent = encryptionService.encryptMessage(subject, encryptionKey);
 
     // Create initial message using the subject
     const newMessage = {
@@ -115,7 +125,9 @@ exports.createConversation = async (req, res) => {
       conversationId,
       senderId: userId,
       participantIds, // Store participants with each message for easy querying
-      content: subject, // Use subject as the initial message
+      content: encryptedContent, // Use subject as the initial message but encrypted
+      isEncrypted: true,
+      originalLength: subject.length, // Store original length for UI purposes
       timestamp,
       createdAt: new Date().toISOString(),
       read: false
@@ -135,10 +147,11 @@ exports.createConversation = async (req, res) => {
         conversationId,
         participants: participantIds,
         subject,
+        isEncrypted: true,
         lastMessage: {
           messageId,
           senderId: userId,
-          content: subject,
+          content: subject, // Return the plaintext for the initial message
           timestamp: new Date(timestamp).toISOString()
         },
         createdAt: new Date().toISOString(),
@@ -182,9 +195,28 @@ exports.getMessages = async (req, res) => {
       // Sort messages by timestamp (oldest first)
       const messages = result.Items.sort((a, b) => a.timestamp - b.timestamp);
       
+      // Get the encryption key for the conversation
+      const encryptionKey = await encryptionKeyService.getEncryptionKey(conversationId);
+      
+      // Decrypt messages if they are encrypted
+      if (encryptionKey) {
+        messages.forEach(message => {
+          if (message.isEncrypted) {
+            try {
+              message.originalContent = message.content; // Store the encrypted content
+              message.content = encryptionService.decryptMessage(message.content, encryptionKey);
+            } catch (decryptError) {
+              logger.error(`Error decrypting message ${message.messageId}:`, decryptError);
+              message.content = "[Encrypted message - decryption failed]";
+            }
+          }
+        });
+      }
+      
       res.status(200).json({ 
         messages,
-        count: messages.length 
+        count: messages.length,
+        isEncrypted: !!encryptionKey
       });
     } else {
       res.status(404).json({ message: 'Conversation not found' });
@@ -232,6 +264,12 @@ exports.sendMessage = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to send messages in this conversation' });
     }
 
+    // Get or create encryption key for the conversation
+    const encryptionKey = await encryptionKeyService.ensureEncryptionKey(conversationId, participantIds);
+    
+    // Encrypt the message content
+    const encryptedContent = encryptionService.encryptMessage(content, encryptionKey);
+
     // Create new message
     const messageId = uuidv4();
     const timestamp = Date.now();
@@ -241,7 +279,9 @@ exports.sendMessage = async (req, res) => {
       conversationId,
       senderId: userId,
       participantIds, // Include participants for easy querying
-      content,
+      content: encryptedContent, // Store the encrypted content
+      isEncrypted: true,
+      originalLength: content.length, // Store original length for UI purposes
       timestamp,
       createdAt: new Date().toISOString(),
       read: false
@@ -263,9 +303,10 @@ exports.sendMessage = async (req, res) => {
       `${userResult.Item.firstName} ${userResult.Item.lastName}` : 
       'a user';
     
-    // Add sender name to message for notification
+    // Add sender name to message for notification (don't include the full content)
     const messageWithSender = {
       ...newMessage,
+      content: 'New encrypted message',  // Don't send the encrypted content in notifications
       senderName
     };
 
@@ -287,7 +328,8 @@ exports.sendMessage = async (req, res) => {
         messageId,
         conversationId,
         senderId: userId,
-        content,
+        content, // Return the plaintext for the sender's confirmation
+        isEncrypted: true,
         timestamp: new Date(timestamp).toISOString(),
         createdAt: new Date().toISOString(),
         read: false
@@ -302,7 +344,7 @@ exports.sendMessage = async (req, res) => {
 /**
  * Mark messages as read
  */
-exports.markAsRead = async (req, res) => {
+exports.markMessagesAsRead = async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { messageIds } = req.body;
@@ -312,7 +354,7 @@ exports.markAsRead = async (req, res) => {
       return res.status(400).json({ message: 'Message IDs are required' });
     }
 
-    // First check if conversation exists and user is a participant
+    // Check if conversation exists and user is a participant
     const conversationParams = {
       TableName: TABLES.MESSAGES,
       IndexName: 'ConversationIndex',
@@ -336,29 +378,139 @@ exports.markAsRead = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to access this conversation' });
     }
 
-    // Mark messages as read
+    // Update each message to mark as read
     const updatePromises = messageIds.map(messageId => {
-      return dynamoDB.update({
+      const params = {
         TableName: TABLES.MESSAGES,
         Key: { messageId },
-        UpdateExpression: 'set #read = :read',
-        ExpressionAttributeNames: {
-          '#read': 'read'
-        },
+        UpdateExpression: 'set #read = :read, updatedAt = :updatedAt',
+        ExpressionAttributeNames: { '#read': 'read' },
         ExpressionAttributeValues: {
-          ':read': true
-        }
-      }).promise();
+          ':read': true,
+          ':updatedAt': new Date().toISOString()
+        },
+        ReturnValues: 'NONE'
+      };
+      
+      return dynamoDB.update(params).promise();
     });
 
     await Promise.all(updatePromises);
 
     res.status(200).json({ 
       message: 'Messages marked as read',
-      updatedMessageIds: messageIds
+      messageIds
     });
   } catch (error) {
-    logger.error('Error in markAsRead function:', error);
+    logger.error('Error in markMessagesAsRead function:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get AI response to a message
+ */
+exports.getAIResponse = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { message } = req.body;
+    const { userId, role } = req.user;
+
+    if (!message) {
+      return res.status(400).json({ message: 'Message content is required' });
+    }
+
+    // Check if conversation exists and user is a participant
+    const conversationParams = {
+      TableName: TABLES.MESSAGES,
+      IndexName: 'ConversationIndex',
+      KeyConditionExpression: 'conversationId = :conversationId',
+      Limit: 1,
+      ExpressionAttributeValues: {
+        ':conversationId': conversationId
+      }
+    };
+
+    const conversationResult = await dynamoDB.query(conversationParams).promise();
+    
+    if (!conversationResult.Items || conversationResult.Items.length === 0) {
+      return res.status(404).json({ message: 'Conversation not found' });
+    }
+
+    const participantIds = conversationResult.Items[0].participantIds;
+    
+    // Check if user is a participant
+    if (role !== 'admin' && role !== 'secretary' && !participantIds.includes(userId)) {
+      return res.status(403).json({ message: 'You do not have permission to access this conversation' });
+    }
+
+    // Get AI response from Dialogflow
+    const aiResponseData = await dialogflowService.detectIntent(message);
+    
+    // Create a message ID for the AI response
+    const messageId = uuidv4();
+    const timestamp = Date.now();
+    
+    // Get encryption key for the conversation
+    const encryptionKey = await encryptionKeyService.getEncryptionKey(conversationId);
+    
+    // Encrypt the AI response
+    const encryptedResponse = encryptionService.encryptMessage(aiResponseData.response, encryptionKey);
+    
+    // Create the AI response message
+    const aiMessage = {
+      messageId,
+      conversationId,
+      senderId: 'AI_ASSISTANT', // Special ID for AI messages
+      participantIds,
+      content: encryptedResponse,
+      isEncrypted: true,
+      isAIGenerated: true,
+      intent: aiResponseData.intent,
+      originalLength: aiResponseData.response.length,
+      timestamp,
+      createdAt: new Date().toISOString(),
+      read: false
+    };
+    
+    // Save the AI message to the database
+    await dynamoDB.put({
+      TableName: TABLES.MESSAGES,
+      Item: aiMessage
+    }).promise();
+    
+    // Send notifications to all participants
+    for (const participantId of participantIds) {
+      if (participantId !== userId) {
+        try {
+          await notifyMessage(participantId, {
+            ...aiMessage,
+            content: 'New AI message available',
+            senderName: 'MedConnect Assistant'
+          });
+        } catch (notifyError) {
+          logger.error(`Error sending AI message notification to user ${participantId}:`, notifyError);
+        }
+      }
+    }
+    
+    res.status(201).json({
+      message: 'AI response generated successfully',
+      messageDetails: {
+        messageId,
+        conversationId,
+        senderId: 'AI_ASSISTANT',
+        content: aiResponseData.response, // Return plaintext for immediate display
+        intent: aiResponseData.intent,
+        isAIGenerated: true,
+        isEncrypted: true,
+        timestamp: new Date(timestamp).toISOString(),
+        createdAt: new Date().toISOString(),
+        read: false
+      }
+    });
+  } catch (error) {
+    logger.error('Error in getAIResponse function:', error);
     res.status(500).json({ message: 'Server error' });
   }
 }; 

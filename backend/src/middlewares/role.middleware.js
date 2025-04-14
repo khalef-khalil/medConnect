@@ -93,4 +93,31 @@ exports.isResourceOwnerOrHasRole = (allowedRoles, paramName) => {
       return res.status(500).json({ message: 'Internal server error.' });
     }
   };
+};
+
+/**
+ * Middleware to check if user has any of the specified roles
+ * @param {Array} allowedRoles - Array of roles that have access
+ */
+exports.hasRole = (allowedRoles) => {
+  return (req, res, next) => {
+    try {
+      // User info comes from JWT verification middleware
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      // Check if user has one of the allowed roles
+      const hasAllowedRole = allowedRoles.includes(req.user.role);
+      
+      if (!hasAllowedRole) {
+        return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+      }
+
+      next();
+    } catch (error) {
+      logger.error('Error in hasRole middleware:', error);
+      return res.status(500).json({ message: 'Internal server error.' });
+    }
+  };
 }; 
