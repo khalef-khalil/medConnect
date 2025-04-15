@@ -52,7 +52,7 @@ export default function RegisterPage() {
   const handleRegistration = async (data: RegisterFormData) => {
     try {
       await registerUser(data);
-      toast.success('Registration successful!');
+      // Toast is already shown in the useAuth hook
     } catch (err) {
       toast.error(error || 'Failed to register. Please try again.');
     }

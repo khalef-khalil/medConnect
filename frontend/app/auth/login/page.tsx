@@ -27,7 +27,7 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginFormData) => {
     try {
       await login(data);
-      toast.success('Login successful!');
+      // Toast is already shown in the useAuth hook
     } catch (err) {
       // Error is already set in the useAuth hook
       toast.error(error || 'Failed to login. Please try again.');

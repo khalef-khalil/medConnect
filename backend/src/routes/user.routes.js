@@ -18,6 +18,10 @@ router.get('/profile', userController.getProfile);
 router.put('/profile', userController.updateProfile);
 router.post('/profile/image', userController.uploadProfileImage);
 
+// Routes accessible to all authenticated users
+router.get('/doctors', userController.getDoctors);
+router.get('/doctors/:doctorId', userController.getDoctorById);
+
 // Admin only routes
 router.use(roleMiddleware.isAdmin);
 router.get('/', userController.getAllUsers);

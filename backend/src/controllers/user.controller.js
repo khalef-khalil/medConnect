@@ -605,4 +605,83 @@ exports.deleteUser = async (req, res) => {
     logger.error('Error in deleteUser function:', error);
     res.status(500).json({ message: 'Server error' });
   }
+};
+
+/**
+ * Get all doctors
+ */
+exports.getDoctors = async (req, res) => {
+  try {
+    const { specialization } = req.query;
+    
+    // Use ExpressionAttributeNames to handle reserved keywords
+    let filterExpression = '#userRole = :roleValue';
+    let expressionAttributeValues = {
+      ':roleValue': 'doctor'
+    };
+    
+    // Define attribute names to handle reserved keywords
+    let expressionAttributeNames = {
+      '#userRole': 'role'
+    };
+    
+    // If specialization is provided, add it to the filter
+    if (specialization && specialization !== 'All') {
+      filterExpression += ' and specialization = :specialization';
+      expressionAttributeValues[':specialization'] = specialization;
+    }
+    
+    const params = {
+      TableName: TABLES.USERS,
+      FilterExpression: filterExpression,
+      ExpressionAttributeNames: expressionAttributeNames,
+      ExpressionAttributeValues: expressionAttributeValues
+    };
+    
+    const result = await dynamoDB.scan(params).promise();
+    
+    // Remove sensitive data from each doctor
+    const doctors = result.Items.map(doctor => {
+      const { password, resetToken, resetExpires, ...doctorData } = doctor;
+      return doctorData;
+    });
+    
+    res.status(200).json({ users: doctors });
+  } catch (error) {
+    logger.error('Error in getDoctors function:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Get doctor by ID
+ */
+exports.getDoctorById = async (req, res) => {
+  try {
+    const { doctorId } = req.params;
+
+    const params = {
+      TableName: TABLES.USERS,
+      Key: { userId: doctorId }
+    };
+
+    const result = await dynamoDB.get(params).promise();
+    
+    if (!result.Item) {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+
+    // Check if the user is actually a doctor
+    if (result.Item.role !== 'doctor') {
+      return res.status(404).json({ message: 'Doctor not found' });
+    }
+
+    // Return doctor data without sensitive information
+    const { password, resetToken, resetExpires, ...doctorData } = result.Item;
+    
+    res.status(200).json({ user: doctorData });
+  } catch (error) {
+    logger.error('Error in getDoctorById function:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 }; 
