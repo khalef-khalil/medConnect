@@ -246,11 +246,123 @@ const notifyPayment = async (userId, payment, status) => {
   }
 };
 
+/**
+ * Create notification for schedule changes
+ * @param {string} doctorId - The ID of the doctor to notify
+ * @param {Object} schedule - The schedule data
+ * @param {string} action - The action performed (created, updated, deleted)
+ */
+const notifyScheduleUpdate = async (doctorId, schedule, action) => {
+  try {
+    // Format the day of the week
+    const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const dayName = daysOfWeek[schedule.dayOfWeek];
+
+    // Format the message based on the action
+    let message = '';
+    let title = '';
+    
+    switch (action) {
+      case 'created':
+        title = 'New Schedule Created';
+        message = `New schedule created for ${dayName}: ${schedule.startTime} to ${schedule.endTime}`;
+        break;
+      case 'updated':
+        title = 'Schedule Updated';
+        message = `Your schedule for ${dayName} was updated to ${schedule.startTime} to ${schedule.endTime}`;
+        break;
+      case 'deleted':
+        title = 'Schedule Deleted';
+        message = `Your schedule for ${dayName} (${schedule.startTime} to ${schedule.endTime}) was deleted`;
+        break;
+      default:
+        title = 'Schedule Changed';
+        message = `Schedule for ${dayName} was ${action}`;
+    }
+
+    // Use the existing notification system
+    return await createNotification(
+      doctorId,
+      title,
+      message,
+      'schedule',
+      { scheduleId: schedule.scheduleId }
+    );
+  } catch (error) {
+    logger.error('Error creating schedule notification:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create notification for doctor-secretary assignments
+ * @param {string} userId - The ID of the user to notify (doctor or secretary)
+ * @param {Object} assignment - The assignment data
+ * @param {string} action - The action performed (created, deleted)
+ * @param {string} userType - The type of user being notified ('doctor' or 'secretary')
+ */
+const notifyAssignment = async (userId, assignment, action, userType) => {
+  try {
+    // Get details of the other party in the assignment
+    const otherUserType = userType === 'doctor' ? 'secretary' : 'doctor';
+    const otherUserId = userType === 'doctor' ? assignment.secretaryId : assignment.doctorId;
+    
+    const otherUserParams = {
+      TableName: TABLES.USERS,
+      Key: { userId: otherUserId }
+    };
+    
+    const otherUserResult = await dynamoDB.get(otherUserParams).promise();
+    if (!otherUserResult.Item) {
+      throw new Error(`${otherUserType} not found with id: ${otherUserId}`);
+    }
+
+    const otherUser = otherUserResult.Item;
+    const otherUserName = `${otherUser.firstName} ${otherUser.lastName}`;
+
+    // Format the message based on the action and user type
+    let title = '';
+    let message = '';
+    
+    if (userType === 'doctor') {
+      if (action === 'created') {
+        title = 'New Secretary Assignment';
+        message = `${otherUserName} has been assigned as your secretary`;
+      } else {
+        title = 'Secretary Unassigned';
+        message = `${otherUserName} is no longer assigned as your secretary`;
+      }
+    } else { // secretary
+      if (action === 'created') {
+        title = 'New Doctor Assignment';
+        message = `You have been assigned to Dr. ${otherUserName}`;
+      } else {
+        title = 'Doctor Unassigned';
+        message = `You are no longer assigned to Dr. ${otherUserName}`;
+      }
+    }
+
+    // Use the existing notification system
+    return await createNotification(
+      userId,
+      title,
+      message,
+      'assignment',
+      { assignmentId: assignment.assignmentId }
+    );
+  } catch (error) {
+    logger.error('Error creating assignment notification:', error);
+    throw error;
+  }
+};
+
 module.exports = {
   createNotification,
   getUserNotifications,
   markNotificationAsRead,
   notifyAppointment,
   notifyMessage,
-  notifyPayment
+  notifyPayment,
+  notifyScheduleUpdate,
+  notifyAssignment
 }; 

@@ -128,7 +128,7 @@ This document outlines the phased approach for developing the MedConnect fronten
 
 ## Phase 2: Appointment Management
 
-**Objective:** Implement the appointment scheduling and management system.
+**Objective:** Implement the appointment scheduling and management system, including doctor schedules and secretary-doctor relationships.
 
 ### API Endpoints:
 
@@ -273,6 +273,186 @@ This document outlines the phased approach for developing the MedConnect fronten
 }
 ```
 
+### Doctor Schedule Management:
+
+#### Create Doctor Schedule
+- **Endpoint:** `POST /api/v1/schedules`
+- **Request Body:**
+```json
+{
+  "doctorId": "string",
+  "dayOfWeek": "number", // 0-6 (Sunday-Saturday)
+  "startTime": "string", // Format: "HH:MM"
+  "endTime": "string", // Format: "HH:MM"
+  "slotDuration": "number" // Minutes
+}
+```
+- **Response (201):**
+```json
+{
+  "schedule": {
+    "scheduleId": "string",
+    "doctorId": "string",
+    "dayOfWeek": "number",
+    "startTime": "string",
+    "endTime": "string",
+    "slotDuration": "number",
+    "createdAt": "number",
+    "updatedAt": "number"
+  }
+}
+```
+
+#### Get Doctor Schedules
+- **Endpoint:** `GET /api/v1/schedules/doctor/:id`
+- **Response (200):**
+```json
+{
+  "schedules": [
+    {
+      "scheduleId": "string",
+      "doctorId": "string",
+      "dayOfWeek": "number",
+      "startTime": "string",
+      "endTime": "string",
+      "slotDuration": "number",
+      "createdAt": "number",
+      "updatedAt": "number"
+    }
+  ],
+  "doctorDetails": {
+    "userId": "string",
+    "firstName": "string",
+    "lastName": "string",
+    "specialization": "string",
+    "profileImage": "string"
+  }
+}
+```
+
+#### Update Doctor Schedule
+- **Endpoint:** `PUT /api/v1/schedules/:id`
+- **Request Body:**
+```json
+{
+  "startTime": "string", // Format: "HH:MM"
+  "endTime": "string", // Format: "HH:MM"
+  "slotDuration": "number" // Minutes
+}
+```
+- **Response (200):**
+```json
+{
+  "scheduleId": "string",
+  "doctorId": "string",
+  "dayOfWeek": "number",
+  "startTime": "string",
+  "endTime": "string",
+  "slotDuration": "number",
+  "updatedAt": "number"
+}
+```
+
+#### Delete Doctor Schedule
+- **Endpoint:** `DELETE /api/v1/schedules/:id`
+- **Response (200):**
+```json
+{
+  "message": "Schedule successfully deleted"
+}
+```
+
+### Secretary-Doctor Assignment Management:
+
+#### Create Secretary-Doctor Assignment
+- **Endpoint:** `POST /api/v1/assignments`
+- **Request Body:**
+```json
+{
+  "secretaryId": "string",
+  "doctorId": "string"
+}
+```
+- **Response (201):**
+```json
+{
+  "assignment": {
+    "assignmentId": "string",
+    "secretaryId": "string",
+    "doctorId": "string",
+    "createdAt": "number",
+    "createdBy": "string"
+  }
+}
+```
+
+#### Get Doctor's Secretaries
+- **Endpoint:** `GET /api/v1/doctors/:doctorId/assignments`
+- **Response (200):**
+```json
+{
+  "assignments": [
+    {
+      "assignmentId": "string",
+      "secretaryId": "string",
+      "doctorId": "string",
+      "createdAt": "number",
+      "secretaryDetails": {
+        "userId": "string",
+        "firstName": "string",
+        "lastName": "string",
+        "email": "string",
+        "profileImage": "string"
+      }
+    }
+  ],
+  "doctorDetails": {
+    "userId": "string",
+    "firstName": "string",
+    "lastName": "string",
+    "specialization": "string"
+  }
+}
+```
+
+#### Get Secretary's Assigned Doctors
+- **Endpoint:** `GET /api/v1/secretaries/:secretaryId/assignments`
+- **Response (200):**
+```json
+{
+  "assignments": [
+    {
+      "assignmentId": "string",
+      "secretaryId": "string",
+      "doctorId": "string",
+      "createdAt": "number",
+      "doctorDetails": {
+        "userId": "string",
+        "firstName": "string",
+        "lastName": "string",
+        "email": "string",
+        "specialization": "string",
+        "profileImage": "string"
+      }
+    }
+  ],
+  "secretaryDetails": {
+    "userId": "string",
+    "firstName": "string",
+    "lastName": "string"
+  }
+}
+```
+
+#### Delete Secretary-Doctor Assignment
+- **Endpoint:** `DELETE /api/v1/assignments/:id`
+- **Response (200):**
+```json
+{
+  "message": "Assignment successfully deleted"
+}
+```
+
 ### Implementation Tasks:
 1. Create appointment calendar view
 2. Implement appointment creation flow
@@ -280,6 +460,12 @@ This document outlines the phased approach for developing the MedConnect fronten
 4. Develop appointment details and management screens
 5. Implement role-specific appointment views (patient, doctor, secretary)
 6. Create appointment status tracking system
+7. Implement doctor schedule management interface
+8. Build secretary-doctor assignment management
+9. Create secretary dashboard for managing doctor appointments
+10. Implement recurring appointment scheduling based on doctor availability
+11. Build conflict detection for appointment scheduling
+12. Develop secretary workspace for managing multiple doctors
 
 ## Phase 3: Video Consultation
 

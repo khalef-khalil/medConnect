@@ -39,6 +39,7 @@ SECRETARY_PASSWORD="password123"
 USER_ID=""
 DOCTOR_ID=""
 PATIENT_ID=""
+SECRETARY_ID=""
 APPOINTMENT_ID=""
 CONVERSATION_ID=""
 MESSAGE_ID=""
@@ -47,6 +48,9 @@ NOTIFICATION_ID=""
 ENCRYPTED_CONTENT=""
 AI_RESPONSE_ID=""
 WEBRTC_SESSION_ID=""
+SCHEDULE_ID=""
+SCHEDULED_APPOINTMENT_ID=""
+ASSIGNMENT_ID=""
 
 # Dependency flags
 DEPENDENCY_FAILURES=0
@@ -151,6 +155,15 @@ run_test() {
       elif [ "$dep" = "DOCTOR_ID" ] && [ -z "$DOCTOR_ID" ]; then
         skip_test "$test_name" "Missing dependency: Doctor ID"
         return
+      elif [ "$dep" = "SECRETARY_ID" ] && [ -z "$SECRETARY_ID" ]; then
+        skip_test "$test_name" "Missing dependency: Secretary ID"
+        return
+      elif [ "$dep" = "SCHEDULE_ID" ] && [ -z "$SCHEDULE_ID" ]; then
+        skip_test "$test_name" "Missing dependency: Schedule ID"
+        return
+      elif [ "$dep" = "SCHEDULED_APPOINTMENT_ID" ] && [ -z "$SCHEDULED_APPOINTMENT_ID" ]; then
+        skip_test "$test_name" "Missing dependency: Scheduled Appointment ID"
+        return 
       fi
     done
   fi
@@ -222,6 +235,51 @@ run_test() {
     return
   fi
   
+  # Handle Appointment with Schedule creation which can return 409 if appointment already exists
+  if [[ "$test_name" == "Create Appointment with Schedule" ]] && [ "$status_code" = "409" ] && [[ "$expected_status" == *"201"* || "$expected_status" == *"409"* ]]; then
+    echo -e "${GREEN}✓ Success: Expected status $expected_status, got $status_code (Appointment already exists)${NC}"
+    PASSED_TESTS=$((PASSED_TESTS+1))
+    
+    # Try to extract the appointment ID from the conflicting appointment
+    if [ -f "$response_file" ]; then
+      SCHEDULED_APPOINTMENT_ID=$(jq -r '.appointment.appointmentId // .conflictingAppointment.appointmentId // empty' $response_file 2>/dev/null || echo "")
+      if [ ! -z "$SCHEDULED_APPOINTMENT_ID" ]; then
+        echo "Scheduled Appointment ID: $SCHEDULED_APPOINTMENT_ID"
+      fi
+    fi
+    return
+  fi
+  
+  # Handle Secretary-Doctor Assignment creation which can return 409 if assignment already exists
+  if [[ "$test_name" == "Create Secretary-Doctor Assignment" ]] && [ "$status_code" = "409" ] && [[ "$expected_status" == *"201"* || "$expected_status" == *"409"* ]]; then
+    echo -e "${GREEN}✓ Success: Expected status $expected_status, got $status_code (Assignment already exists)${NC}"
+    PASSED_TESTS=$((PASSED_TESTS+1))
+    
+    # Extract assignment ID from the conflict response
+    if [ -f "$response_file" ]; then
+      ASSIGNMENT_ID=$(jq -r '.assignment.assignmentId // empty' $response_file 2>/dev/null || echo "")
+      if [ ! -z "$ASSIGNMENT_ID" ]; then
+        echo "Assignment ID: $ASSIGNMENT_ID"
+      fi
+    fi
+    return
+  fi
+  
+  # Handle Schedule creation which can return 409 if schedule already exists
+  if [[ "$test_name" == "Create Doctor Schedule" ]] && [ "$status_code" = "409" ] && [[ "$expected_status" == *"201"* || "$expected_status" == *"409"* ]]; then
+    echo -e "${GREEN}✓ Success: Expected status $expected_status, got $status_code (Schedule already exists)${NC}"
+    PASSED_TESTS=$((PASSED_TESTS+1))
+    
+    # Extract schedule ID from the conflict response
+    if [ -f "$response_file" ]; then
+      SCHEDULE_ID=$(jq -r '.schedule.scheduleId // .existingSchedule.scheduleId // empty' $response_file 2>/dev/null || echo "")
+      if [ ! -z "$SCHEDULE_ID" ]; then
+        echo "Schedule ID: $SCHEDULE_ID"
+      fi
+    fi
+    return
+  fi
+  
   # Check if status code matches expected
   if [ "$status_code" = "$expected_status" ]; then
     echo -e "${GREEN}✓ Success: Expected status $expected_status, got $status_code${NC}"
@@ -243,7 +301,9 @@ run_test() {
       echo "Patient ID: $PATIENT_ID"
     elif [ "$test_name" = "Secretary Login" ] && [ "$status_code" = "200" ]; then
       SECRETARY_TOKEN=$(jq -r '.token' $response_file)
+      SECRETARY_ID=$(jq -r '.user.userId' $response_file)
       echo "Secretary token received: ${SECRETARY_TOKEN:0:15}..."
+      echo "Secretary ID: $SECRETARY_ID"
     elif [ "$test_name" = "Create Appointment" ] && [ "$status_code" = "201" ]; then
       APPOINTMENT_ID=$(jq -r '.appointment.appointmentId' $response_file)
       echo "Appointment ID: $APPOINTMENT_ID"
@@ -479,6 +539,93 @@ run_test "Doctor Admits Patient" "POST" "/video/session/$APPOINTMENT_ID/admit/$P
 
 # Start screen sharing
 run_test "Start Screen Sharing" "POST" "/video/session/$APPOINTMENT_ID/screen-sharing" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,APPOINTMENT_ID"
+
+# ======================= DOCTOR-SECRETARY RELATIONSHIP TESTS =======================
+echo -e "${YELLOW}=== Doctor-Secretary Relationship Tests ===${NC}"
+
+# Get tomorrow with Monday adjustment for the schedule tests
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  # macOS
+  TOMORROW_MONDAY=$(date -v+1d -v+mon +%Y-%m-%dT10:00:00.000Z)
+  TOMORROW_MONDAY_END=$(date -v+1d -v+mon +%Y-%m-%dT10:30:00.000Z)
+else
+  # Linux
+  TOMORROW_MONDAY=$(date -d "next Monday 10:00:00" +%Y-%m-%dT10:00:00.000Z)
+  TOMORROW_MONDAY_END=$(date -d "next Monday 10:30:00" +%Y-%m-%dT10:30:00.000Z)
+fi
+
+# Create Doctor Schedule
+run_test "Create Doctor Schedule" "POST" "/schedules" '{"doctorId":"'$DOCTOR_ID'","dayOfWeek":1,"startTime":"09:00","endTime":"17:00","slotDuration":30}' "$ADMIN_TOKEN" "201,409" "ADMIN_TOKEN,DOCTOR_ID"
+
+# Store schedule ID for later use
+SCHEDULE_ID=$(jq -r '.schedule.scheduleId' $response_file)
+
+# Get Doctor Schedules
+run_test "Get Doctor Schedules" "GET" "/schedules/doctor/$DOCTOR_ID" "" "$ADMIN_TOKEN" "200" "ADMIN_TOKEN,DOCTOR_ID"
+
+# Update Doctor Schedule
+run_test "Update Doctor Schedule" "PUT" "/schedules/$SCHEDULE_ID" '{"startTime":"10:00","endTime":"18:00"}' "$ADMIN_TOKEN" "200" "ADMIN_TOKEN,SCHEDULE_ID"
+
+# Create Secretary-Doctor Assignment
+run_test "Create Secretary-Doctor Assignment" "POST" "/assignments" '{"secretaryId":"'$SECRETARY_ID'","doctorId":"'$DOCTOR_ID'"}' "$ADMIN_TOKEN" "201,409" "ADMIN_TOKEN,SECRETARY_ID,DOCTOR_ID"
+
+# Store assignment ID for later use
+ASSIGNMENT_ID=$(jq -r '.assignment.assignmentId' $response_file)
+
+# Get Doctor's Secretaries
+if [ -n "$SECRETARY_ID" ] && [ -n "$DOCTOR_ID" ]; then
+  run_test "Get Doctor's Secretaries" "GET" "/doctors/$DOCTOR_ID/assignments" "" "$ADMIN_TOKEN" "200" "ADMIN_TOKEN,DOCTOR_ID"
+  
+  # Store assignment ID for later use
+  ASSIGNMENT_ID=$(jq -r '.assignments[0].assignmentId' $response_file 2>/dev/null || echo "")
+  debug "Assignment ID extracted: $ASSIGNMENT_ID"
+else
+  echo -e "${YELLOW}Skipping Get Doctor's Secretaries (missing secretary or doctor ID)${NC}"
+  ((tests_skipped++))
+  ASSIGNMENT_ID=""
+fi
+
+# Get Secretary's Assigned Doctors
+if [ -n "$SECRETARY_ID" ]; then
+  run_test "Get Secretary's Assigned Doctors" "GET" "/secretaries/$SECRETARY_ID/assignments" "" "$ADMIN_TOKEN" "200" "ADMIN_TOKEN,SECRETARY_ID"
+else
+  echo -e "${YELLOW}Skipping Get Secretary's Assigned Doctors (missing secretary ID)${NC}"
+  ((tests_skipped++))
+fi
+
+# Test Appointment Creation with Doctor Schedule
+run_test "Create Appointment with Schedule" "POST" "/appointments" '{"patientId":"'$PATIENT_ID'","doctorId":"'$DOCTOR_ID'","startTime":"'$TOMORROW_MONDAY'","endTime":"'$TOMORROW_MONDAY_END'","appointmentType":"Follow-up","notes":"Follow-up appointment"}' "$SECRETARY_TOKEN" "201,409" "SECRETARY_TOKEN,PATIENT_ID,DOCTOR_ID"
+
+# Store scheduled appointment ID
+SCHEDULED_APPOINTMENT_ID=$(jq -r '.appointment.appointmentId // empty' $response_file)
+if [ -z "$SCHEDULED_APPOINTMENT_ID" ]; then
+  # Try the alternate format that might be returned by a 409 conflict response
+  SCHEDULED_APPOINTMENT_ID=$(jq -r '.appointment.appointmentId // empty' $response_file 2>/dev/null || jq -r '.conflictingAppointment.appointmentId // empty' $response_file 2>/dev/null || echo "")
+fi
+
+# Get Secretary's Assigned Doctor Appointments
+run_test "Get Secretary's Doctor Appointments" "GET" "/appointments" "" "$SECRETARY_TOKEN" "200" "SECRETARY_TOKEN"
+
+# Check Doctor Availability with Schedule
+TODAY=$(get_today)
+NEXT_WEEK=$(get_week_from_now)
+run_test "Check Doctor Availability with Schedule" "GET" "/appointments/doctor/$DOCTOR_ID/availability?startDate=$TODAY&endDate=$NEXT_WEEK" "" "$PATIENT_TOKEN" "200" "PATIENT_TOKEN,DOCTOR_ID"
+
+# Delete Secretary-Doctor Assignment
+if [ -n "$ASSIGNMENT_ID" ]; then
+  run_test "Delete Secretary-Doctor Assignment" "DELETE" "/assignments/$ASSIGNMENT_ID" "" "$ADMIN_TOKEN" "200" "ADMIN_TOKEN,ASSIGNMENT_ID"
+else
+  echo -e "${YELLOW}Skipping Delete Secretary-Doctor Assignment (missing assignment ID)${NC}"
+  ((tests_skipped++))
+fi
+
+# Delete Doctor Schedule
+run_test "Delete Doctor Schedule" "DELETE" "/schedules/$SCHEDULE_ID" "" "$ADMIN_TOKEN" "200" "ADMIN_TOKEN,SCHEDULE_ID"
+
+# Delete scheduled appointment if created
+if [ ! -z "$SCHEDULED_APPOINTMENT_ID" ]; then
+  run_test "Delete Scheduled Appointment" "DELETE" "/appointments/$SCHEDULED_APPOINTMENT_ID" "" "$DOCTOR_TOKEN" "200" "DOCTOR_TOKEN,SCHEDULED_APPOINTMENT_ID"
+fi
 
 # ======================= ENHANCED ENCRYPTION TESTS =======================
 echo -e "${YELLOW}=== Enhanced End-to-End Encryption Tests ===${NC}"
