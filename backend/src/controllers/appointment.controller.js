@@ -4,28 +4,6 @@ const { logger } = require('../utils/logger');
 const { notifyAppointment } = require('../services/notification.service');
 
 /**
- * Check if a secretary is assigned to a doctor
- * @param {string} secretaryId - The ID of the secretary
- * @param {string} doctorId - The ID of the doctor
- * @returns {Promise<boolean>} - Whether the secretary is assigned to the doctor
- */
-async function isSecretaryAssignedToDoctor(secretaryId, doctorId) {
-  const params = {
-    TableName: TABLES.SECRETARY_ASSIGNMENTS,
-    IndexName: 'SecretaryIndex',
-    KeyConditionExpression: 'secretaryId = :secretaryId',
-    FilterExpression: 'doctorId = :doctorId',
-    ExpressionAttributeValues: {
-      ':secretaryId': secretaryId,
-      ':doctorId': doctorId
-    }
-  };
-
-  const result = await dynamoDB.query(params).promise();
-  return result.Items && result.Items.length > 0;
-}
-
-/**
  * Get all appointments for the logged-in user based on their role
  */
 exports.getAppointments = async (req, res) => {
@@ -44,6 +22,7 @@ exports.getAppointments = async (req, res) => {
         }
       };
     } else if (role === 'doctor') {
+      // Doctors see their own appointments
       params = {
         TableName: TABLES.APPOINTMENTS,
         IndexName: 'DoctorIndex',
@@ -52,52 +31,6 @@ exports.getAppointments = async (req, res) => {
           ':doctorId': userId
         }
       };
-    } else if (role === 'secretary') {
-      // Get the doctors this secretary is assigned to
-      const assignmentParams = {
-        TableName: TABLES.SECRETARY_ASSIGNMENTS,
-        IndexName: 'SecretaryIndex',
-        KeyConditionExpression: 'secretaryId = :secretaryId',
-        ExpressionAttributeValues: {
-          ':secretaryId': userId
-        }
-      };
-
-      const assignmentResult = await dynamoDB.query(assignmentParams).promise();
-      
-      if (!assignmentResult.Items || assignmentResult.Items.length === 0) {
-        return res.status(200).json({ 
-          appointments: [],
-          count: 0,
-          message: 'You are not assigned to any doctors'
-        });
-      }
-
-      // Get appointments for all assigned doctors
-      const doctorIds = assignmentResult.Items.map(assignment => assignment.doctorId);
-      
-      // For each doctor ID, query their appointments
-      const allAppointments = [];
-      for (const doctorId of doctorIds) {
-        const doctorParams = {
-          TableName: TABLES.APPOINTMENTS,
-          IndexName: 'DoctorIndex',
-          KeyConditionExpression: 'doctorId = :doctorId',
-          ExpressionAttributeValues: {
-            ':doctorId': doctorId
-          }
-        };
-
-        const doctorAppointments = await dynamoDB.query(doctorParams).promise();
-        if (doctorAppointments.Items && doctorAppointments.Items.length > 0) {
-          allAppointments.push(...doctorAppointments.Items);
-        }
-      }
-
-      return res.status(200).json({ 
-        appointments: allAppointments,
-        count: allAppointments.length
-      });
     } else if (role === 'admin') {
       // Admin can see all appointments
       params = {
@@ -140,7 +73,7 @@ exports.getAppointmentById = async (req, res) => {
 
     // Check if user has permission to view this appointment
     const appointment = result.Item;
-    if (role !== 'admin' && role !== 'secretary' &&
+    if (role !== 'admin' && 
         userId !== appointment.patientId && 
         userId !== appointment.doctorId) {
       return res.status(403).json({ message: 'You do not have permission to view this appointment' });
@@ -222,16 +155,6 @@ exports.createAppointment = async (req, res) => {
       return res.status(403).json({ message: 'You can only book appointments for yourself' });
     }
     
-    if (role === 'secretary') {
-      // Check if the secretary is assigned to this doctor
-      const isAssigned = await isSecretaryAssignedToDoctor(userId, doctorId);
-      if (!isAssigned) {
-        return res.status(403).json({ 
-          message: 'You are not authorized to book appointments for this doctor' 
-        });
-      }
-    }
-
     // Check for exact match (same patient, doctor, start time and end time)
     // This is a special case for the API test where we want to accept duplicate appointments
     const exactMatchParams = {
@@ -415,15 +338,7 @@ exports.updateAppointment = async (req, res) => {
       const appointment = appointmentResult.Item;
 
       // Check permissions
-      if (role === 'secretary') {
-        // Check if secretary is assigned to this doctor
-        const isAssigned = await isSecretaryAssignedToDoctor(userId, appointment.doctorId);
-        if (!isAssigned) {
-          return res.status(403).json({ 
-            message: 'You are not authorized to manage appointments for this doctor' 
-          });
-        }
-      } else if (role !== 'admin' && userId !== appointment.doctorId) {
+      if (role !== 'admin' && userId !== appointment.doctorId) {
         return res.status(403).json({ message: 'You do not have permission to update this appointment' });
       }
 
@@ -545,15 +460,7 @@ exports.deleteAppointment = async (req, res) => {
     const appointment = appointmentResult.Item;
 
     // Check permissions
-    if (role === 'secretary') {
-      // Check if secretary is assigned to this doctor
-      const isAssigned = await isSecretaryAssignedToDoctor(userId, appointment.doctorId);
-      if (!isAssigned) {
-        return res.status(403).json({ 
-          message: 'You are not authorized to manage appointments for this doctor' 
-        });
-      }
-    } else if (role !== 'admin' && userId !== appointment.doctorId && userId !== appointment.patientId) {
+    if (role !== 'admin' && userId !== appointment.doctorId && userId !== appointment.patientId) {
       return res.status(403).json({ message: 'You do not have permission to delete this appointment' });
     }
 

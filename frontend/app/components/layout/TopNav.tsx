@@ -29,8 +29,6 @@ export default function TopNav() {
         return 'Patient';
       case 'doctor':
         return 'Doctor';
-      case 'secretary':
-        return 'Secretary';
       case 'admin':
         return 'Admin';
       default:

@@ -1,31 +1,39 @@
 const express = require('express');
 const router = express.Router();
-
-// Import route modules
-const userRoutes = require('./user.routes');
-const appointmentRoutes = require('./appointment.routes');
-const chatRoutes = require('./chat.routes');
-const paymentRoutes = require('./payment.routes');
-const videoRoutes = require('./video.routes');
-const notificationRoutes = require('./notification.routes');
-const scheduleRoutes = require('./schedule.routes');
-const assignmentRoutes = require('./assignment.routes');
-const assignmentController = require('../controllers/assignment.controller');
 const { verifyToken } = require('../middlewares/auth.middleware');
 
-// Mount routes
-router.use('/users', userRoutes);
-router.use('/appointments', appointmentRoutes);
-router.use('/chats', chatRoutes);
-router.use('/payments', paymentRoutes);
-router.use('/video', videoRoutes);
-router.use('/notifications', notificationRoutes);
-router.use('/schedules', scheduleRoutes);
-router.use('/assignments', assignmentRoutes);
+// Import controllers
+const userController = require('../controllers/user.controller');
+const appointmentController = require('../controllers/appointment.controller');
+const scheduleController = require('../controllers/schedule.controller');
+const videoController = require('../controllers/video.controller');
+const chatController = require('../controllers/chat.controller');
+const paymentController = require('../controllers/payment.controller');
+const notificationController = require('../controllers/notification.controller');
 
-// Doctor-Secretary assignment routes
-router.get('/doctors/:doctorId/assignments', verifyToken, assignmentController.getDoctorSecretaries);
-router.get('/secretaries/:secretaryId/assignments', verifyToken, assignmentController.getSecretaryAssignments);
+// User routes
+router.use('/users', require('./user.routes'));
+
+// Appointment routes
+router.use('/appointments', require('./appointment.routes'));
+
+// Schedule routes
+router.use('/schedules', require('./schedule.routes'));
+
+// Video routes
+router.use('/video', require('./video.routes'));
+
+// Chat routes
+router.use('/chats', require('./chat.routes'));
+
+// Payment routes
+router.use('/payments', require('./payment.routes'));
+
+// Notification routes
+router.use('/notifications', require('./notification.routes'));
+
+// Additional Appointment routes
+router.get('/doctors/:doctorId/availability', verifyToken, appointmentController.getDoctorAvailability);
 
 // Health check endpoint
 router.get('/../health', (req, res) => {

@@ -17,7 +17,7 @@ This document outlines the phased approach for developing the MedConnect fronten
   "lastName": "string",
   "email": "string",
   "password": "string",
-  "role": "patient|doctor|secretary|admin"
+  "role": "patient|doctor|admin"
 }
 ```
 - **Response (201):**
@@ -128,7 +128,7 @@ This document outlines the phased approach for developing the MedConnect fronten
 
 ## Phase 2: Appointment Management
 
-**Objective:** Implement the appointment scheduling and management system, including doctor schedules and secretary-doctor relationships.
+**Objective:** Implement the appointment scheduling and management system, including doctor schedules.
 
 ### API Endpoints:
 
@@ -362,110 +362,21 @@ This document outlines the phased approach for developing the MedConnect fronten
 }
 ```
 
-### Secretary-Doctor Assignment Management:
-
-#### Create Secretary-Doctor Assignment
-- **Endpoint:** `POST /api/v1/assignments`
-- **Request Body:**
-```json
-{
-  "secretaryId": "string",
-  "doctorId": "string"
-}
-```
-- **Response (201):**
-```json
-{
-  "assignment": {
-    "assignmentId": "string",
-    "secretaryId": "string",
-    "doctorId": "string",
-    "createdAt": "number",
-    "createdBy": "string"
-  }
-}
-```
-
-#### Get Doctor's Secretaries
-- **Endpoint:** `GET /api/v1/doctors/:doctorId/assignments`
-- **Response (200):**
-```json
-{
-  "assignments": [
-    {
-      "assignmentId": "string",
-      "secretaryId": "string",
-      "doctorId": "string",
-      "createdAt": "number",
-      "secretaryDetails": {
-        "userId": "string",
-        "firstName": "string",
-        "lastName": "string",
-        "email": "string",
-        "profileImage": "string"
-      }
-    }
-  ],
-  "doctorDetails": {
-    "userId": "string",
-    "firstName": "string",
-    "lastName": "string",
-    "specialization": "string"
-  }
-}
-```
-
-#### Get Secretary's Assigned Doctors
-- **Endpoint:** `GET /api/v1/secretaries/:secretaryId/assignments`
-- **Response (200):**
-```json
-{
-  "assignments": [
-    {
-      "assignmentId": "string",
-      "secretaryId": "string",
-      "doctorId": "string",
-      "createdAt": "number",
-      "doctorDetails": {
-        "userId": "string",
-        "firstName": "string",
-        "lastName": "string",
-        "email": "string",
-        "specialization": "string",
-        "profileImage": "string"
-      }
-    }
-  ],
-  "secretaryDetails": {
-    "userId": "string",
-    "firstName": "string",
-    "lastName": "string"
-  }
-}
-```
-
-#### Delete Secretary-Doctor Assignment
-- **Endpoint:** `DELETE /api/v1/assignments/:id`
-- **Response (200):**
-```json
-{
-  "message": "Assignment successfully deleted"
-}
-```
-
 ### Implementation Tasks:
 1. Create appointment calendar view
 2. Implement appointment creation flow
 3. Build doctor availability checker
 4. Develop appointment details and management screens
-5. Implement role-specific appointment views (patient, doctor, secretary)
+5. Implement role-specific appointment views (patient, doctor)
 6. Create appointment status tracking system
 7. Implement doctor schedule management interface
-8. Build secretary-doctor assignment management
-9. Create secretary dashboard for managing doctor appointments
-10. Implement recurring appointment scheduling based on doctor availability
-11. Build conflict detection for appointment scheduling
-12. Develop secretary workspace for managing multiple doctors
+8. Develop doctor dashboard for managing their schedules and appointments
+9. Implement recurring appointment scheduling based on doctor availability
+10. Build conflict detection for appointment scheduling
+11. Create notification system for appointment changes
+12. Develop appointment analytics and reporting for doctors
+13. Implement patient appointment request workflow
+14. Build doctor's appointment confirmation interface
 
 ## Phase 3: Video Consultation
 

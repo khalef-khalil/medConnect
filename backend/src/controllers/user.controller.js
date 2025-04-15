@@ -28,6 +28,12 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: 'All fields are required' });
     }
 
+    // Validate role
+    const validRoles = ['patient', 'doctor', 'admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role. Must be patient, doctor, or admin' });
+    }
+
     // Check if user already exists
     const userParams = {
       TableName: TABLES.USERS,

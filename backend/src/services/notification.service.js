@@ -294,68 +294,7 @@ const notifyScheduleUpdate = async (doctorId, schedule, action) => {
   }
 };
 
-/**
- * Create notification for doctor-secretary assignments
- * @param {string} userId - The ID of the user to notify (doctor or secretary)
- * @param {Object} assignment - The assignment data
- * @param {string} action - The action performed (created, deleted)
- * @param {string} userType - The type of user being notified ('doctor' or 'secretary')
- */
-const notifyAssignment = async (userId, assignment, action, userType) => {
-  try {
-    // Get details of the other party in the assignment
-    const otherUserType = userType === 'doctor' ? 'secretary' : 'doctor';
-    const otherUserId = userType === 'doctor' ? assignment.secretaryId : assignment.doctorId;
-    
-    const otherUserParams = {
-      TableName: TABLES.USERS,
-      Key: { userId: otherUserId }
-    };
-    
-    const otherUserResult = await dynamoDB.get(otherUserParams).promise();
-    if (!otherUserResult.Item) {
-      throw new Error(`${otherUserType} not found with id: ${otherUserId}`);
-    }
-
-    const otherUser = otherUserResult.Item;
-    const otherUserName = `${otherUser.firstName} ${otherUser.lastName}`;
-
-    // Format the message based on the action and user type
-    let title = '';
-    let message = '';
-    
-    if (userType === 'doctor') {
-      if (action === 'created') {
-        title = 'New Secretary Assignment';
-        message = `${otherUserName} has been assigned as your secretary`;
-      } else {
-        title = 'Secretary Unassigned';
-        message = `${otherUserName} is no longer assigned as your secretary`;
-      }
-    } else { // secretary
-      if (action === 'created') {
-        title = 'New Doctor Assignment';
-        message = `You have been assigned to Dr. ${otherUserName}`;
-      } else {
-        title = 'Doctor Unassigned';
-        message = `You are no longer assigned to Dr. ${otherUserName}`;
-      }
-    }
-
-    // Use the existing notification system
-    return await createNotification(
-      userId,
-      title,
-      message,
-      'assignment',
-      { assignmentId: assignment.assignmentId }
-    );
-  } catch (error) {
-    logger.error('Error creating assignment notification:', error);
-    throw error;
-  }
-};
-
+// Export all notification creators
 module.exports = {
   createNotification,
   getUserNotifications,
@@ -363,6 +302,5 @@ module.exports = {
   notifyAppointment,
   notifyMessage,
   notifyPayment,
-  notifyScheduleUpdate,
-  notifyAssignment
+  notifyScheduleUpdate
 }; 

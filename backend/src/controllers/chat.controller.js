@@ -18,9 +18,9 @@ exports.getConversations = async (req, res) => {
       TableName: TABLES.MESSAGES
     };
     
-    // For admin and secretary, they can see all conversations
+    // For admin, they can see all conversations
     // Otherwise, only return conversations where the user is a participant
-    if (role !== 'admin' && role !== 'secretary') {
+    if (role !== 'admin') {
       params.FilterExpression = 'contains(participantIds, :userId)';
       params.ExpressionAttributeValues = {
         ':userId': userId
@@ -188,7 +188,7 @@ exports.getMessages = async (req, res) => {
     if (result.Items && result.Items.length > 0) {
       const participantIds = result.Items[0].participantIds;
       
-      if (role !== 'admin' && role !== 'secretary' && !participantIds.includes(userId)) {
+      if (role !== 'admin' && !participantIds.includes(userId)) {
         return res.status(403).json({ message: 'You do not have permission to access this conversation' });
       }
       
@@ -260,7 +260,7 @@ exports.sendMessage = async (req, res) => {
     const participantIds = conversationResult.Items[0].participantIds;
     
     // Check if user is a participant
-    if (role !== 'admin' && role !== 'secretary' && !participantIds.includes(userId)) {
+    if (role !== 'admin' && !participantIds.includes(userId)) {
       return res.status(403).json({ message: 'You do not have permission to send messages in this conversation' });
     }
 
@@ -374,7 +374,7 @@ exports.markMessagesAsRead = async (req, res) => {
     const participantIds = conversationResult.Items[0].participantIds;
     
     // Check if user is a participant
-    if (role !== 'admin' && role !== 'secretary' && !participantIds.includes(userId)) {
+    if (role !== 'admin' && !participantIds.includes(userId)) {
       return res.status(403).json({ message: 'You do not have permission to access this conversation' });
     }
 
@@ -440,7 +440,7 @@ exports.getAIResponse = async (req, res) => {
     const participantIds = conversationResult.Items[0].participantIds;
     
     // Check if user is a participant
-    if (role !== 'admin' && role !== 'secretary' && !participantIds.includes(userId)) {
+    if (role !== 'admin' && !participantIds.includes(userId)) {
       return res.status(403).json({ message: 'You do not have permission to access this conversation' });
     }
 
