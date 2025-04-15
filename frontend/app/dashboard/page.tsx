@@ -13,12 +13,16 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Fetch user profile data on dashboard load
-    getProfile().catch(() => {
-      // If profile fetch fails, redirect to login
-      logout();
-    });
-  }, [getProfile, logout]);
+    // Only fetch profile if we're already authenticated and hydrated
+    const { hydrated } = useAuthStore.getState();
+    
+    if (user && user.userId && hydrated) {
+      getProfile().catch((err) => {
+        // Handle error silently
+        logout();
+      });
+    }
+  }, [getProfile, logout, user]);
 
   // Prepare the welcome message based on role
   const welcomeMessage = () => {

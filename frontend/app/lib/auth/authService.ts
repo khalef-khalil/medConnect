@@ -9,6 +9,7 @@ import {
 } from '../../types/auth';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+
 const authApi = axios.create({
   baseURL: API_URL,
   headers: {
@@ -16,19 +17,52 @@ const authApi = axios.create({
   },
 });
 
+// Immediately set token if one exists in storage
+if (typeof window !== 'undefined') {
+  try {
+    const authData = localStorage.getItem('auth-storage');
+    if (authData) {
+      const parsedData = JSON.parse(authData);
+      const token = parsedData.state?.token;
+      
+      if (token) {
+        authApi.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch (error) {
+    console.error('Error setting token from storage on init', error);
+  }
+}
+
 // Add interceptor to add token to requests
 authApi.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('auth-storage') 
-      ? JSON.parse(localStorage.getItem('auth-storage') || '{}').state?.token
-      : null;
-    
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Check if we're in a browser environment
+    if (typeof window !== 'undefined') {
+      try {
+        const storedAuthString = localStorage.getItem('auth-storage');
+        
+        if (storedAuthString) {
+          const storedAuth = JSON.parse(storedAuthString);
+          const token = storedAuth.state?.token;
+          
+          if (token) {
+            config.headers.Authorization = `Bearer ${token}`;
+          }
+        }
+      } catch (error) {
+        console.error('Error parsing auth token from storage', error);
+      }
     }
     
     return config;
   },
+  (error) => Promise.reject(error)
+);
+
+// Add response interceptor to handle common errors
+authApi.interceptors.response.use(
+  (response) => response,
   (error) => Promise.reject(error)
 );
 

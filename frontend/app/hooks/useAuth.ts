@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService } from '../lib/auth/authService';
 import { useAuthStore } from '../store/authStore';
@@ -8,7 +8,14 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const { setAuth, clearAuth, updateUser } = useAuthStore();
+  const { setAuth, clearAuth, updateUser, hydrated } = useAuthStore();
+  
+  // Effect to reset error state when hydration state changes
+  useEffect(() => {
+    if (hydrated) {
+      setError(null);
+    }
+  }, [hydrated]);
 
   const register = async (data: RegisterFormData) => {
     setLoading(true);
@@ -68,6 +75,11 @@ export const useAuth = () => {
     setLoading(true);
     setError(null);
     try {
+      // Skip profile fetching if not hydrated yet
+      if (!hydrated) {
+        return null;
+      }
+      
       const userData = await authService.getProfile();
       updateUser(userData);
       return userData;
@@ -102,6 +114,7 @@ export const useAuth = () => {
     getProfile,
     updateProfile,
     loading,
-    error
+    error,
+    hydrated
   };
 }; 

@@ -14,44 +14,80 @@ interface RouteGuardProps {
 export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, token, hydrated } = useAuthStore();
   const [authorized, setAuthorized] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Authentication check
     const authCheck = () => {
+      // Don't do anything until hydration is complete
+      if (!hydrated) {
+        setIsLoading(true);
+        return;
+      }
+      
+      setIsLoading(true);
+      
+      // Check if we're on an auth page
+      const isAuthPage = pathname.includes('/auth/');
+      
       // If not authenticated and not on auth page, redirect to login
-      if (!isAuthenticated && !pathname.includes('/auth/')) {
+      if (!isAuthenticated && !isAuthPage) {
         setAuthorized(false);
         router.push('/auth/login');
+        setIsLoading(false);
         return;
       }
 
       // If authenticated but on auth page, redirect to dashboard
-      if (isAuthenticated && pathname.includes('/auth/')) {
+      if (isAuthenticated && isAuthPage) {
         setAuthorized(false);
         router.push('/dashboard');
+        setIsLoading(false);
         return;
       }
 
       // If role-based access control is enabled
       if (allowedRoles && allowedRoles.length > 0 && user) {
         // Check if user role is allowed
-        if (!allowedRoles.includes(user.role)) {
+        const hasAllowedRole = allowedRoles.includes(user.role);
+        
+        if (!hasAllowedRole) {
           setAuthorized(false);
           router.push('/unauthorized');
+          setIsLoading(false);
           return;
         }
       }
 
       setAuthorized(true);
+      setIsLoading(false);
     };
 
     authCheck();
-  }, [pathname, isAuthenticated, router, user, allowedRoles]);
+    
+    // Set up listener for storage events (for multi-tab coordination)
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'auth-storage') {
+        // Re-run auth check if auth storage changes
+        authCheck();
+      }
+    };
+    
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageChange);
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageChange);
+      }
+    };
+  }, [pathname, isAuthenticated, router, user, allowedRoles, token, hydrated]);
 
   // Show loading or children based on authorization status
-  if (!authorized) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <motion.div
@@ -65,6 +101,10 @@ export default function RouteGuard({ children, allowedRoles }: RouteGuardProps) 
         </motion.div>
       </div>
     );
+  }
+
+  if (!authorized) {
+    return null;
   }
 
   return <>{children}</>;
