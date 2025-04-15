@@ -3,7 +3,7 @@ const { TABLES } = require('./src/config/aws');
 
 // Configure AWS SDK
 const awsConfig = {
-  region: process.env.AWS_REGION || 'us-east-1'
+  region: process.env.AWS_REGION || 'eu-north-1'
 };
 
 // Apply AWS configuration
