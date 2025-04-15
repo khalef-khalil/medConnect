@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuthStore } from '../store/authStore';
-import RouteGuard from '../components/auth/RouteGuard';
+import AuthLayout from '../components/layout/AuthLayout';
 import { useAuth } from '../hooks/useAuth';
 
 export default function DashboardPage() {
@@ -193,8 +193,8 @@ export default function DashboardPage() {
   };
 
   return (
-    <RouteGuard>
-      <div className="bg-gray-50 min-h-screen p-4 md:p-8">
+    <AuthLayout>
+      <div className="p-4 md:p-8">
         <div className="max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -205,25 +205,14 @@ export default function DashboardPage() {
               {welcomeMessage()}
             </h1>
             <p className="text-gray-600 mb-8">
-              Welcome to your MedConnect dashboard. Here's a summary of your activities and quick access to key features.
+              Welcome to your MedConnect dashboard. Here's an overview of your platform.
             </p>
 
-            {/* Dashboard Cards */}
             {renderRoleBasedContent()}
-
-            {/* Recent Activity Section */}
-            <div className="mt-10">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Recent Activity</h2>
-              <div className="bg-white rounded-xl shadow-sm p-6">
-                <p className="text-gray-500 text-center py-4">
-                  Your recent activity will appear here once you start using the platform.
-                </p>
-              </div>
-            </div>
           </motion.div>
         </div>
       </div>
-    </RouteGuard>
+    </AuthLayout>
   );
 }
 
@@ -236,23 +225,16 @@ interface DashboardCardProps {
 
 function DashboardCard({ title, description, icon, onClick }: DashboardCardProps) {
   return (
-    <motion.div
-      whileHover={{ scale: 1.02, boxShadow: '0 10px 20px rgba(0, 0, 0, 0.05)' }}
-      whileTap={{ scale: 0.98 }}
-      className="bg-white rounded-xl shadow-sm p-6 cursor-pointer transition-all duration-200"
+    <motion.div 
+      whileHover={{ y: -5, boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }}
+      className="bg-white rounded-xl shadow-sm p-6 cursor-pointer border border-gray-100 hover:border-primary-100 transition-all"
       onClick={onClick}
     >
-      <div className="flex items-start">
-        <div className="flex-shrink-0 bg-primary-50 p-3 rounded-lg mr-4">
-          <div className="text-primary-600">
-            {icon}
-          </div>
-        </div>
-        <div>
-          <h3 className="text-lg font-medium text-gray-800 mb-1">{title}</h3>
-          <p className="text-gray-500 text-sm">{description}</p>
-        </div>
+      <div className="rounded-full w-12 h-12 flex items-center justify-center bg-primary-50 text-primary-600 mb-4">
+        {icon}
       </div>
+      <h3 className="text-lg font-semibold text-gray-800 mb-2">{title}</h3>
+      <p className="text-gray-600">{description}</p>
     </motion.div>
   );
 } 

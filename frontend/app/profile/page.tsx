@@ -9,7 +9,7 @@ import { useAuthStore } from '../store/authStore';
 import { useAuth } from '../hooks/useAuth';
 import { UpdateProfileFormData } from '../types/auth';
 import { updateProfileSchema } from '../lib/auth/validation';
-import RouteGuard from '../components/auth/RouteGuard';
+import AuthLayout from '../components/layout/AuthLayout';
 import FormInput from '../components/auth/FormInput';
 import FormButton from '../components/auth/FormButton';
 
@@ -62,7 +62,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <RouteGuard>
+    <AuthLayout>
       <div className="bg-gray-50 min-h-screen p-4 md:p-8">
         <div className="max-w-3xl mx-auto">
           <motion.div
@@ -186,6 +186,6 @@ export default function ProfilePage() {
           </motion.div>
         </div>
       </div>
-    </RouteGuard>
+    </AuthLayout>
   );
 } 
