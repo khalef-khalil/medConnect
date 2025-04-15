@@ -5,6 +5,58 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  
+  /* Primary colors */
+  --primary-50: #edf8ff;
+  --primary-100: #d6ecff;
+  --primary-200: #b5dfff;
+  --primary-300: #83caff;
+  --primary-400: #48abff;
+  --primary-500: #1e8aff;
+  --primary-600: #0068ff;
+  --primary-700: #0055db;
+  --primary-800: #0447b3;
+  --primary-900: #083f8a;
+  --primary-950: #06275a;
+  
+  /* Secondary colors */
+  --secondary-50: #f0f9ff;
+  --secondary-100: #e0f1fe;
+  --secondary-200: #bae3fd;
+  --secondary-300: #7dcefc;
+  --secondary-400: #3ab2f8;
+  --secondary-500: #0e98eb;
+  --secondary-600: #0178ca;
+  --secondary-700: #0260a4;
+  --secondary-800: #065186;
+  --secondary-900: #0c446f;
+  --secondary-950: #082a48;
+  
+  /* Accent colors */
+  --accent-50: #edfcf5;
+  --accent-100: #d3f8e6;
+  --accent-200: #aaf0cf;
+  --accent-300: #73e3b0;
+  --accent-400: #39cd8b;
+  --accent-500: #18b16d;
+  --accent-600: #0f8d56;
+  --accent-700: #0f7148;
+  --accent-800: #11583c;
+  --accent-900: #104832;
+  --accent-950: #07291e;
+  
+  /* Danger colors */
+  --danger-50: #fef2f2;
+  --danger-100: #fde4e4;
+  --danger-200: #fbcbcb;
+  --danger-300: #f7a5a5;
+  --danger-400: #f27171;
+  --danger-500: #ea4545;
+  --danger-600: #d62020;
+  --danger-700: #b91919;
+  --danger-800: #991919;
+  --danger-900: #7d1b1b;
+  --danger-950: #430a0a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,4 +76,41 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+@layer components {
+  .input-field {
+    @apply w-full px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-300 transition-all;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-700 text-white font-medium px-6 py-3 rounded-lg transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply bg-white border border-gray-200 hover:bg-gray-50 text-gray-800 font-medium px-6 py-3 rounded-lg transition-colors;
+  }
+  
+  .card {
+    @apply bg-white p-6 rounded-card shadow-card;
+  }
+}
+
+/* Animation utilities */
+.fadeIn {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.slideUp {
+  animation: slideUp 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
