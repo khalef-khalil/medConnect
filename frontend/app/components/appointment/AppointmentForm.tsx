@@ -62,27 +62,74 @@ export default function AppointmentForm() {
   
   const getDaysWithSlots = (): DailyAvailability[] => {
     if (!availability || !availability.availableSlots) return [];
-    return availability.availableSlots;
+    
+    // Process the available slots into daily slots
+    const slotsByDay: { [date: string]: AvailabilitySlot[] } = {};
+    
+    // Group slots by day
+    if (Array.isArray(availability.availableSlots)) {
+      // Already in the correct format
+      return availability.availableSlots.filter(day => day && day.date); // Filter out items with undefined date
+    } else if (availability.availableSlots) {
+      // Process slots from backend format
+      availability.availableSlots.forEach((slot: any) => {
+        if (slot.start && slot.end) {
+          const date = new Date(slot.start);
+          if (!isNaN(date.getTime())) {
+            const dateStr = date.toISOString().split('T')[0]; // Get YYYY-MM-DD
+            
+            if (!slotsByDay[dateStr]) {
+              slotsByDay[dateStr] = [];
+            }
+            
+            slotsByDay[dateStr].push({
+              startTime: slot.start,
+              endTime: slot.end
+            });
+          }
+        }
+      });
+      
+      // Convert to array of DailyAvailability
+      const result: DailyAvailability[] = Object.keys(slotsByDay).map(date => ({
+        date,
+        slots: slotsByDay[date]
+      }));
+      
+      return result;
+    }
+    
+    return [];
   };
   
   const getSlotsForDay = (date: string): AvailabilitySlot[] => {
-    const day = getDaysWithSlots().find(day => day.date === date);
-    return day ? day.slots : [];
+    if (!date) return [];
+    const day = getDaysWithSlots().find(day => day && day.date === date);
+    return day && day.slots ? day.slots : [];
   };
   
   const formatTimeSlot = (slot: AvailabilitySlot): string => {
-    const startTime = new Date(slot.startTime);
-    const endTime = new Date(slot.endTime);
-    
-    return `${startTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })} - ${endTime.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    })}`;
+    try {
+      const startTime = new Date(slot.startTime);
+      const endTime = new Date(slot.endTime);
+      
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        return "Invalid time slot";
+      }
+      
+      return `${startTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      })} - ${endTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      })}`;
+    } catch (error) {
+      console.error("Error formatting time slot:", error);
+      return "Invalid time slot";
+    }
   };
   
   const handleSubmit = async (e: React.FormEvent) => {
@@ -136,32 +183,16 @@ export default function AppointmentForm() {
   
   return (
     <motion.div
-      className="bg-white rounded-xl shadow-sm p-6"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
+      className="bg-white rounded-xl shadow-sm p-6 md:p-8"
     >
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Book an Appointment</h2>
-      
       <div className="mb-6">
-        <h3 className="text-gray-700 font-medium mb-2">Selected Doctor</h3>
-        <div className="bg-gray-50 p-4 rounded-lg flex items-center">
-          <div className="text-primary-600 mr-4">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-          <div>
-            <p className="font-medium text-gray-900">Dr. {doctor.firstName} {doctor.lastName}</p>
-            <p className="text-sm text-gray-600">{doctor.specialization}</p>
-          </div>
-          <button
-            className="ml-auto text-primary-600 text-sm"
-            onClick={() => router.push('/doctors')}
-          >
-            Change
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-gray-800">Schedule an Appointment</h2>
+        <p className="text-gray-600">
+          with Dr. {doctor.firstName} {doctor.lastName} ({doctor.specialization})
+        </p>
       </div>
       
       <form onSubmit={handleSubmit}>
@@ -191,38 +222,51 @@ export default function AppointmentForm() {
           ) : (
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
               {getDaysWithSlots().length > 0 ? (
-                getDaysWithSlots().map((day) => {
-                  const date = new Date(day.date);
-                  const isSelected = selectedDate === day.date;
-                  
-                  return (
-                    <motion.button
-                      key={day.date}
-                      type="button"
-                      className={`p-3 rounded-lg text-center transition-colors ${
-                        isSelected
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                      }`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => {
-                        setSelectedDate(day.date);
-                        setSelectedTimeSlot(null);
-                      }}
-                    >
-                      <div className="text-xs mb-1">
-                        {date.toLocaleDateString('en-US', { weekday: 'short' })}
-                      </div>
-                      <div className="font-medium">
-                        {date.getDate()}
-                      </div>
-                      <div className="text-xs">
-                        {date.toLocaleDateString('en-US', { month: 'short' })}
-                      </div>
-                    </motion.button>
-                  );
-                })
+                getDaysWithSlots()
+                  .filter(day => day && day.date && day.slots && day.slots.length > 0)
+                  .map((day) => {
+                    try {
+                      if (!day || !day.date) return null;
+                      
+                      const date = new Date(day.date);
+                      const isSelected = selectedDate === day.date;
+                      
+                      if (isNaN(date.getTime())) {
+                        return null;
+                      }
+                      
+                      return (
+                        <motion.button
+                          key={day.date}
+                          type="button"
+                          className={`p-3 rounded-lg text-center transition-colors ${
+                            isSelected
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                          }`}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => {
+                            setSelectedDate(day.date);
+                            setSelectedTimeSlot(null);
+                          }}
+                        >
+                          <div className="text-xs mb-1">
+                            {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                          </div>
+                          <div className="font-medium">
+                            {date.getDate()}
+                          </div>
+                          <div className="text-xs">
+                            {date.toLocaleDateString('en-US', { month: 'short' })}
+                          </div>
+                        </motion.button>
+                      );
+                    } catch (error) {
+                      console.error("Error rendering date:", error);
+                      return null;
+                    }
+                  })
               ) : (
                 <div className="col-span-full text-center py-4 text-gray-500">
                   No available dates found for the next two weeks.
@@ -242,28 +286,42 @@ export default function AppointmentForm() {
             <label className="block text-gray-700 font-medium mb-2">Select Time</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {getSlotsForDay(selectedDate).length > 0 ? (
-                getSlotsForDay(selectedDate).map((slot, index) => {
-                  const isSelected = selectedTimeSlot && 
-                    selectedTimeSlot.startTime === slot.startTime && 
-                    selectedTimeSlot.endTime === slot.endTime;
-                  
-                  return (
-                    <motion.button
-                      key={index}
-                      type="button"
-                      className={`p-3 rounded-lg text-center transition-colors ${
-                        isSelected
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                      }`}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setSelectedTimeSlot(slot)}
-                    >
-                      {formatTimeSlot(slot)}
-                    </motion.button>
-                  );
-                })
+                getSlotsForDay(selectedDate)
+                  .filter(slot => slot && slot.startTime && slot.endTime)
+                  .map((slot, index) => {
+                    try {
+                      const startTime = new Date(slot.startTime);
+                      const endTime = new Date(slot.endTime);
+                      
+                      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+                        return null;
+                      }
+                      
+                      const isSelected = selectedTimeSlot && 
+                        selectedTimeSlot.startTime === slot.startTime && 
+                        selectedTimeSlot.endTime === slot.endTime;
+                      
+                      return (
+                        <motion.button
+                          key={`${slot.startTime}-${index}`}
+                          type="button"
+                          className={`p-3 rounded-lg text-center transition-colors ${
+                            isSelected
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                          }`}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => setSelectedTimeSlot(slot)}
+                        >
+                          {formatTimeSlot(slot)}
+                        </motion.button>
+                      );
+                    } catch (error) {
+                      console.error("Error rendering time slot:", error);
+                      return null;
+                    }
+                  })
               ) : (
                 <div className="col-span-full text-center py-4 text-gray-500">
                   No available time slots for this date.
@@ -307,7 +365,7 @@ export default function AppointmentForm() {
             {submitting ? (
               <div className="flex items-center">
                 <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                Booking...
+                <span>Booking...</span>
               </div>
             ) : (
               'Book Appointment'
