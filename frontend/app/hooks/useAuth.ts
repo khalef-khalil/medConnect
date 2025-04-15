@@ -96,6 +96,7 @@ export const useAuth = () => {
     setError(null);
     try {
       const updatedUser = await authService.updateProfile(data);
+      // Make sure we're updating the user in the store with the correct format
       updateUser(updatedUser);
       return updatedUser;
     } catch (err: any) {

@@ -88,8 +88,21 @@ export const authService = {
   },
   
   updateProfile: async (data: UpdateProfileFormData): Promise<User> => {
-    const response = await authApi.put<User>('/users/profile', data);
-    return response.data;
+    // First update the profile with name information
+    const profileResponse = await authApi.put<User>('/users/profile', {
+      firstName: data.firstName,
+      lastName: data.lastName,
+    });
+    
+    // If profile image is included, upload it separately
+    if (data.profileImage && data.profileImage.startsWith('data:image')) {
+      const imageResponse = await authApi.post<User>('/users/profile/image', {
+        imageBase64: data.profileImage
+      });
+      return imageResponse.data.user || imageResponse.data;
+    }
+    
+    return profileResponse.data.user || profileResponse.data;
   },
   
   // Helper method to set auth token in headers
