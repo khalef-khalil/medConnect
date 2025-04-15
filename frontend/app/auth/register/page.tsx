@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -14,7 +14,7 @@ import FormButton from '@/app/components/auth/FormButton';
 import { motion } from 'framer-motion';
 
 export default function RegisterPage() {
-  const { register, handleSubmit, formState: { errors }, trigger, getValues } = useForm<RegisterFormData>({
+  const { register, handleSubmit, formState: { errors }, trigger, getValues, setValue, watch } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       firstName: '',
@@ -28,6 +28,15 @@ export default function RegisterPage() {
 
   const { register: registerUser, loading, error } = useAuth();
   const [step, setStep] = useState(1);
+  const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
+  
+  // Watch for form value changes
+  const roleValue = watch('role');
+  
+  // Keep selectedRole in sync with form value
+  useEffect(() => {
+    setSelectedRole(roleValue as UserRole);
+  }, [roleValue]);
 
   // Handle advancing to step 2
   const handleContinueToStep2 = async () => {
@@ -35,21 +44,16 @@ export default function RegisterPage() {
     const isValid = await trigger(['firstName', 'lastName', 'email']);
     
     if (isValid) {
-      console.log("Step 1 data is valid, moving to step 2");
       setStep(2);
-    } else {
-      console.error("Validation errors in step 1:", errors);
     }
   };
 
   // Handle final submission
   const handleRegistration = async (data: RegisterFormData) => {
     try {
-      console.log("Submitting registration data:", data);
       await registerUser(data);
       toast.success('Registration successful!');
     } catch (err) {
-      console.error("Registration error:", err);
       toast.error(error || 'Failed to register. Please try again.');
     }
   };
@@ -184,23 +188,31 @@ export default function RegisterPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Select your role</label>
                   <div className="grid grid-cols-1 gap-3">
                     {roleOptions.map((role) => (
-                      <label
+                      <div
                         key={role.value}
                         className={`
                           flex items-center p-3 border rounded-lg cursor-pointer transition-all
                           ${errors.role && 'border-danger-500'}
-                          ${getValues('role') === role.value 
+                          ${selectedRole === role.value 
                             ? 'border-primary-600 bg-primary-50 ring-2 ring-primary-200' 
                             : 'border-gray-200 hover:border-primary-300'}
                         `}
+                        onClick={() => {
+                          // Update both the form value and the UI state
+                          setValue('role', role.value, { shouldValidate: true });
+                          setSelectedRole(role.value);
+                          console.log('Selected role:', role.value);
+                        }}
                       >
                         <input
                           type="radio"
+                          id={`role-${role.value}`}
                           value={role.value}
                           className="sr-only"
+                          checked={selectedRole === role.value}
                           {...register('role')}
                         />
-                        <div className="flex items-start">
+                        <div className="flex items-start w-full">
                           <div className="flex-shrink-0 mt-0.5">
                             {role.icon}
                           </div>
@@ -209,7 +221,7 @@ export default function RegisterPage() {
                             <div className="text-sm text-gray-500">{role.description}</div>
                           </div>
                         </div>
-                      </label>
+                      </div>
                     ))}
                   </div>
                   {errors.role && (
