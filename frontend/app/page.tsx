@@ -54,8 +54,8 @@ export default function HomePage() {
               <Link href="/features" className="text-gray-600 hover:text-primary-600 transition-colors">
                 Features
               </Link>
-              <Link href="/pricing" className="text-gray-600 hover:text-primary-600 transition-colors">
-                Pricing
+              <Link href="/faq" className="text-gray-600 hover:text-primary-600 transition-colors">
+                FAQ
               </Link>
               <Link href="/contact" className="text-gray-600 hover:text-primary-600 transition-colors">
                 Contact
@@ -194,7 +194,7 @@ export default function HomePage() {
               <h3 className="text-white font-medium mb-4">Platform</h3>
               <ul className="space-y-2">
                 <li><Link href="/features" className="hover:text-white transition-colors">Features</Link></li>
-                <li><Link href="/pricing" className="hover:text-white transition-colors">Pricing</Link></li>
+                <li><Link href="/faq" className="hover:text-white transition-colors">FAQ</Link></li>
                 <li><Link href="/security" className="hover:text-white transition-colors">Security</Link></li>
               </ul>
             </div>

@@ -49,7 +49,7 @@ export default function DoctorCard({ doctor }: DoctorCardProps) {
           </div>
         </div>
         
-        <div className="mt-4 pt-4 border-t border-gray-100">
+        <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
           <button
             className="w-full bg-primary-50 hover:bg-primary-100 text-primary-600 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
             onClick={(e) => {
@@ -58,6 +58,21 @@ export default function DoctorCard({ doctor }: DoctorCardProps) {
             }}
           >
             Book Appointment
+          </button>
+          
+          <button
+            className="w-full bg-green-50 hover:bg-green-100 text-green-600 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/messages/new?doctorId=${doctor.userId}`);
+            }}
+          >
+            <div className="flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              Start a Conversation
+            </div>
           </button>
         </div>
       </div>
