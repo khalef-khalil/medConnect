@@ -14,12 +14,15 @@ export default function ScheduleList({ doctorId }: ScheduleListProps) {
   const [sortedSchedules, setSortedSchedules] = useState<ISchedule[]>([]);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<{status: number, message: string} | null>(null);
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
 
   useEffect(() => {
-    if (doctorId) {
+    if (doctorId && !hasFetchedOnce) {
       loadSchedules();
+      setHasFetchedOnce(true);
     }
-  }, [doctorId]);
+  }, [doctorId, hasFetchedOnce]);
 
   const loadSchedules = async () => {
     try {
@@ -27,8 +30,17 @@ export default function ScheduleList({ doctorId }: ScheduleListProps) {
       if (result && result.schedules) {
         setSchedules(result.schedules);
       }
-    } catch (err) {
+      setFetchError(null);
+    } catch (err: any) {
       console.error('Error loading schedules:', err);
+      
+      // If it's a 404, that just means no schedules yet (not a real error)
+      if (err.status === 404) {
+        setSchedules([]);
+        setFetchError(null);
+      } else {
+        setFetchError(err);
+      }
     }
   };
 
@@ -79,7 +91,7 @@ export default function ScheduleList({ doctorId }: ScheduleListProps) {
     setIsEditing(null);
   };
 
-  if (loading) {
+  if (loading && !hasFetchedOnce) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600"></div>
@@ -88,13 +100,18 @@ export default function ScheduleList({ doctorId }: ScheduleListProps) {
     );
   }
 
-  if (error) {
+  if (fetchError && fetchError.status !== 404) {
     return (
       <div className="text-center py-12">
-        <div className="text-red-500 mb-4">Error loading schedules</div>
+        <div className="text-red-500 mb-4">
+          {fetchError.message || 'Error loading schedules'}
+        </div>
         <button 
           className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          onClick={loadSchedules}
+          onClick={() => {
+            setHasFetchedOnce(false);
+            loadSchedules();
+          }}
         >
           Retry
         </button>

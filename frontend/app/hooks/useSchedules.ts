@@ -35,7 +35,15 @@ export const useSchedules = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        if (response.status === 404) {
+          return { 
+            schedules: [], 
+            count: 0,
+            doctorDetails: null 
+          };
+        }
+        
+        const errorData = await response.json().catch(() => ({ message: 'Failed to fetch schedules' }));
         throw { 
           status: response.status, 
           message: errorData.message || 'Failed to fetch schedules' 
@@ -51,7 +59,7 @@ export const useSchedules = () => {
       } else {
         setError('An error occurred while fetching schedules');
       }
-      return null;
+      throw err;
     } finally {
       setLoading(false);
     }

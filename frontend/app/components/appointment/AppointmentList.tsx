@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppointmentCard from './AppointmentCard';
 import { useAppointments } from '../../hooks/useAppointments';
+import { useAuthStore } from '../../store/authStore';
 import { Appointment } from '../../types/appointment';
 
 export default function AppointmentList() {
   const { appointments, loading, error, fetchAppointments, removeAppointment } = useAppointments();
+  const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]);
 
@@ -150,7 +152,7 @@ export default function AppointmentList() {
                   ? "You don't have any upcoming appointments" 
                   : "You don't have any past appointments"}
               </p>
-              {activeTab === 'upcoming' && (
+              {activeTab === 'upcoming' && user?.role === 'patient' && (
                 <button
                   className="mt-4 bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors"
                   onClick={() => {
@@ -159,6 +161,11 @@ export default function AppointmentList() {
                 >
                   Find a Doctor
                 </button>
+              )}
+              {activeTab === 'upcoming' && user?.role === 'doctor' && (
+                <p className="mt-2 text-sm text-gray-500">
+                  Patients will book appointments based on your schedule availability.
+                </p>
               )}
             </motion.div>
           )}

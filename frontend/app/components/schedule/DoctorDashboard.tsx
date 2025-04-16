@@ -17,23 +17,35 @@ export default function DoctorDashboard() {
   const [upcomingAppointments, setUpcomingAppointments] = useState(0);
   const [recentAppointments, setRecentAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [schedulesError, setSchedulesError] = useState(false);
+  const [hasAttemptedSchedules, setHasAttemptedSchedules] = useState(false);
   
   useEffect(() => {
-    if (user && user.userId) {
+    if (user && user.userId && !hasAttemptedSchedules) {
       loadDashboardData();
     }
-  }, [user]);
+  }, [user, hasAttemptedSchedules]);
   
   const loadDashboardData = async () => {
     if (!user || !user.userId) return;
     
     setLoading(true);
+    setHasAttemptedSchedules(true);
     
     try {
       // Fetch doctor schedules
-      const schedulesData = await fetchDoctorSchedules(user.userId);
-      if (schedulesData) {
-        setScheduleCount(schedulesData.count || 0);
+      try {
+        const schedulesData = await fetchDoctorSchedules(user.userId);
+        if (schedulesData) {
+          setScheduleCount(schedulesData.count || 0);
+        }
+      } catch (scheduleErr: any) {
+        console.error('Error fetching schedules:', scheduleErr);
+        setSchedulesError(true);
+        // If it's a 404, just set schedule count to 0 and continue
+        if (scheduleErr.status === 404) {
+          setScheduleCount(0);
+        }
       }
       
       // Fetch today's appointments
@@ -41,29 +53,40 @@ export default function DoctorDashboard() {
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
       
-      const appointmentsData = await fetchDoctorAppointments(
-        user.userId,
-        startOfToday.toISOString(),
-        endOfToday.toISOString()
-      );
-      
-      if (appointmentsData && appointmentsData.appointments) {
-        setTodayAppointments(appointmentsData.appointments.length);
-        setRecentAppointments(appointmentsData.appointments.slice(0, 5));
+      try {
+        const appointmentsData = await fetchDoctorAppointments(
+          user.userId,
+          startOfToday.toISOString(),
+          endOfToday.toISOString()
+        );
+        
+        if (appointmentsData && appointmentsData.appointments) {
+          setTodayAppointments(appointmentsData.appointments.length);
+          setRecentAppointments(appointmentsData.appointments.slice(0, 5));
+        }
+      } catch (appointmentErr) {
+        console.error('Error fetching today\'s appointments:', appointmentErr);
+        setTodayAppointments(0);
+        setRecentAppointments([]);
       }
       
       // Fetch upcoming appointments (next 7 days)
       const oneWeekLater = new Date();
       oneWeekLater.setDate(now.getDate() + 7);
       
-      const upcomingData = await fetchDoctorAppointments(
-        user.userId,
-        startOfToday.toISOString(),
-        oneWeekLater.toISOString()
-      );
-      
-      if (upcomingData && upcomingData.appointments) {
-        setUpcomingAppointments(upcomingData.appointments.length);
+      try {
+        const upcomingData = await fetchDoctorAppointments(
+          user.userId,
+          startOfToday.toISOString(),
+          oneWeekLater.toISOString()
+        );
+        
+        if (upcomingData && upcomingData.appointments) {
+          setUpcomingAppointments(upcomingData.appointments.length);
+        }
+      } catch (upcomingErr) {
+        console.error('Error fetching upcoming appointments:', upcomingErr);
+        setUpcomingAppointments(0);
       }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
@@ -85,7 +108,7 @@ export default function DoctorDashboard() {
     });
   };
   
-  if (loading || schedulesLoading || appointmentsLoading) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600"></div>
