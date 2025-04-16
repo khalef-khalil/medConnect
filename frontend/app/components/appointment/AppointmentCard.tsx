@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { Appointment, AppointmentStatus } from '../../types/appointment';
+import { useAuthStore } from '../../store/authStore';
+import { useAppointments } from '../../hooks/useAppointments';
 
 interface AppointmentCardProps {
   appointment: Appointment;
@@ -10,6 +12,9 @@ interface AppointmentCardProps {
 
 export default function AppointmentCard({ appointment, onCancelClick }: AppointmentCardProps) {
   const router = useRouter();
+  const { user } = useAuthStore();
+  const { updateExistingAppointment } = useAppointments();
+  const [statusLoading, setStatusLoading] = useState<boolean>(false);
   
   // Format date and time
   const formatDate = (dateString: string) => {
@@ -37,6 +42,7 @@ export default function AppointmentCard({ appointment, onCancelClick }: Appointm
       case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'pending':
+      case 'scheduled':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'cancelled':
         return 'bg-red-100 text-red-800 border-red-200';
@@ -53,6 +59,15 @@ export default function AppointmentCard({ appointment, onCancelClick }: Appointm
     return appointmentDate > now && appointment.status !== 'cancelled';
   };
 
+  const isDoctor = () => {
+    return user?.role === 'doctor' && user?.userId === appointment.doctorId;
+  };
+
+  // Check if the appointment needs confirmation (either pending or scheduled status)
+  const needsConfirmation = () => {
+    return appointment.status === 'pending' || appointment.status === 'scheduled';
+  };
+
   const handleClick = () => {
     router.push(`/appointments/${appointment.appointmentId}`);
   };
@@ -61,6 +76,32 @@ export default function AppointmentCard({ appointment, onCancelClick }: Appointm
     e.stopPropagation();
     if (onCancelClick) {
       onCancelClick(appointment.appointmentId);
+    }
+  };
+
+  const handleStatusUpdate = async (e: React.MouseEvent, newStatus: 'confirmed' | 'cancelled') => {
+    e.stopPropagation();
+    
+    if (confirm(`Are you sure you want to ${newStatus === 'confirmed' ? 'confirm' : 'deny'} this appointment?`)) {
+      setStatusLoading(true);
+      
+      try {
+        const updatedAppointment = await updateExistingAppointment(appointment.appointmentId, {
+          status: newStatus
+        });
+        
+        if (updatedAppointment) {
+          // Reload the page to refresh the appointments list
+          window.location.reload();
+        } else {
+          alert(`Failed to ${newStatus === 'confirmed' ? 'confirm' : 'deny'} appointment. Please try again.`);
+        }
+      } catch (error) {
+        console.error('Error updating appointment status:', error);
+        alert('An error occurred while updating the appointment.');
+      } finally {
+        setStatusLoading(false);
+      }
     }
   };
 
@@ -78,7 +119,17 @@ export default function AppointmentCard({ appointment, onCancelClick }: Appointm
               {appointment.appointmentType}
             </h3>
             <p className="text-gray-600">
-              with Dr. {appointment.doctorDetails?.lastName || appointment.doctorName || 'Unknown'}
+              {isDoctor() ? (
+                <>
+                  {appointment.patientDetails ? (
+                    <>Patient: {appointment.patientDetails.firstName} {appointment.patientDetails.lastName}</>
+                  ) : (
+                    <>Patient: {appointment.patientName || 'Patient'}</>
+                  )}
+                </>
+              ) : (
+                <>Dr. {appointment.doctorDetails?.firstName} {appointment.doctorDetails?.lastName || appointment.doctorName || 'Unknown'}</>
+              )}
             </p>
           </div>
           <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(appointment.status)}`}>
@@ -108,7 +159,7 @@ export default function AppointmentCard({ appointment, onCancelClick }: Appointm
           </div>
         )}
         
-        {isUpcoming() && onCancelClick && (
+        {isUpcoming() && onCancelClick && !isDoctor() && (
           <div className="mt-4 pt-4 border-t border-gray-100">
             <button
               className="w-full bg-red-50 hover:bg-red-100 text-red-600 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
@@ -116,6 +167,32 @@ export default function AppointmentCard({ appointment, onCancelClick }: Appointm
             >
               Cancel Appointment
             </button>
+          </div>
+        )}
+        
+        {isDoctor() && needsConfirmation() && isUpcoming() && (
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-2">
+            {statusLoading ? (
+              <div className="col-span-2 flex justify-center py-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary-600"></div>
+                <span className="ml-2 text-sm text-gray-600">Processing...</span>
+              </div>
+            ) : (
+              <>
+                <button
+                  className="bg-red-50 hover:bg-red-100 text-red-600 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
+                  onClick={(e) => handleStatusUpdate(e, 'cancelled')}
+                >
+                  Deny
+                </button>
+                <button
+                  className="bg-green-50 hover:bg-green-100 text-green-600 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
+                  onClick={(e) => handleStatusUpdate(e, 'confirmed')}
+                >
+                  Confirm
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

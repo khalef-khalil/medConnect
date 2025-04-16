@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Appointment } from '../../types/appointment';
 import { useAppointments } from '../../hooks/useAppointments';
+import { useAuthStore } from '../../store/authStore';
 
 interface AppointmentDetailsProps {
   appointment: Appointment;
@@ -10,8 +11,10 @@ interface AppointmentDetailsProps {
 
 export default function AppointmentDetails({ appointment }: AppointmentDetailsProps) {
   const router = useRouter();
+  const { user } = useAuthStore();
   const { updateExistingAppointment, removeAppointment } = useAppointments();
   const [loading, setLoading] = useState<boolean>(false);
+  const [statusLoading, setStatusLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   
   // Format date and time
@@ -34,12 +37,22 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
     });
   };
 
-  // Get status color
-  const getStatusColor = (status: string) => {
+  // Add a helper function to check if the appointment needs confirmation
+  const needsConfirmation = (status?: string) => {
+    return status === 'pending' || status === 'scheduled';
+  };
+
+  // Update the getStatusColor function to handle 'scheduled' status
+  const getStatusColor = (status?: string) => {
+    if (!status) {
+      return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+    
     switch (status) {
       case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'pending':
+      case 'scheduled':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'cancelled':
         return 'bg-red-100 text-red-800 border-red-200';
@@ -54,6 +67,10 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
     const now = new Date();
     const appointmentDate = new Date(appointment.startTime);
     return appointmentDate > now && appointment.status !== 'cancelled';
+  };
+
+  const isDoctor = () => {
+    return user?.role === 'doctor' && user?.userId === appointment.doctorId;
   };
 
   const handleCancel = async () => {
@@ -72,6 +89,24 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
     }
   };
 
+  const handleStatusUpdate = async (newStatus: 'confirmed' | 'cancelled') => {
+    if (confirm(`Are you sure you want to ${newStatus === 'confirmed' ? 'confirm' : 'deny'} this appointment?`)) {
+      setStatusLoading(true);
+      setError(null);
+      
+      const updatedAppointment = await updateExistingAppointment(appointment.appointmentId, {
+        status: newStatus
+      });
+      
+      if (updatedAppointment) {
+        window.location.reload();
+      } else {
+        setError(`Failed to ${newStatus === 'confirmed' ? 'confirm' : 'deny'} appointment. Please try again.`);
+        setStatusLoading(false);
+      }
+    }
+  };
+
   return (
     <motion.div
       className="bg-white rounded-xl shadow-sm overflow-hidden"
@@ -84,11 +119,25 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{appointment.appointmentType}</h1>
             <p className="text-gray-600">
-              with Dr. {appointment.doctorDetails?.lastName || appointment.doctorName || 'Unknown'}
+              {isDoctor() ? (
+                <>with {appointment.patientName || 'Patient'}</>
+              ) : appointment.doctorDetails ? (
+                <>with Dr. {appointment.doctorDetails.firstName} {appointment.doctorDetails.lastName} ({appointment.doctorDetails.specialization || 'General'})</>
+              ) : (
+                <>
+                  with Dr. {appointment.doctorName || 'Unknown'} 
+                  <button 
+                    className="ml-2 text-primary-600 hover:underline text-sm font-medium"
+                    onClick={() => window.location.reload()}
+                  >
+                    (Refresh details)
+                  </button>
+                </>
+              )}
             </p>
           </div>
           <div className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(appointment.status)}`}>
-            {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+            {appointment.status?.charAt(0).toUpperCase() + appointment.status?.slice(1) || 'Unknown'}
           </div>
         </div>
         
@@ -111,7 +160,29 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
             </div>
           </div>
           
-          {appointment.doctorDetails && (
+          {/* Show patient details for doctors */}
+          {isDoctor() && appointment.patientDetails && (
+            <div>
+              <h3 className="text-gray-600 font-medium mb-2">Patient Information</h3>
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center mb-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="text-gray-700">{appointment.patientDetails.firstName} {appointment.patientDetails.lastName}</span>
+                </div>
+                <div className="flex items-center">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-3 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-gray-700">{appointment.patientDetails.email}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Show doctor details for patients */}
+          {!isDoctor() && appointment.doctorDetails && (
             <div>
               <h3 className="text-gray-600 font-medium mb-2">Doctor Information</h3>
               <div className="bg-gray-50 p-4 rounded-lg">
@@ -161,7 +232,47 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
             Back to Appointments
           </button>
           
-          {isUpcoming() && (
+          {/* Doctor actions for pending appointments */}
+          {isDoctor() && needsConfirmation(appointment.status) && isUpcoming() && (
+            <>
+              <motion.button
+                className="px-6 py-3 bg-red-600 text-white rounded-lg disabled:opacity-70 hover:bg-red-700 transition-colors"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleStatusUpdate('cancelled')}
+                disabled={statusLoading}
+              >
+                {statusLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  'Deny Appointment'
+                )}
+              </motion.button>
+              
+              <motion.button
+                className="px-6 py-3 bg-green-600 text-white rounded-lg disabled:opacity-70 hover:bg-green-700 transition-colors"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleStatusUpdate('confirmed')}
+                disabled={statusLoading}
+              >
+                {statusLoading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  'Confirm Appointment'
+                )}
+              </motion.button>
+            </>
+          )}
+          
+          {/* Patient cancel button */}
+          {!isDoctor() && isUpcoming() && (
             <motion.button
               className="px-6 py-3 bg-red-600 text-white rounded-lg disabled:opacity-70 hover:bg-red-700 transition-colors"
               whileHover={{ scale: 1.02 }}

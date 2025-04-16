@@ -6,14 +6,40 @@ import { useAuthStore } from '../../store/authStore';
 import { Appointment } from '../../types/appointment';
 
 export default function AppointmentList() {
-  const { appointments, loading, error, fetchAppointments, removeAppointment } = useAppointments();
+  const { appointments, loading, error, fetchAppointments, removeAppointment, fetchAppointmentById } = useAppointments();
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past'>('upcoming');
   const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]);
+  const [enrichedAppointments, setEnrichedAppointments] = useState<Appointment[]>([]);
+  const [detailsLoading, setDetailsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     fetchAppointments();
   }, [fetchAppointments]);
+
+  // Function to fetch detailed information for appointments
+  const fetchDetailedAppointments = async (appointmentsToFetch: Appointment[]) => {
+    if (!user || user.role !== 'doctor' || appointmentsToFetch.length === 0) {
+      return appointmentsToFetch;
+    }
+
+    setDetailsLoading(true);
+    const detailedAppointments = [...appointmentsToFetch];
+    
+    for (let i = 0; i < detailedAppointments.length; i++) {
+      try {
+        const details = await fetchAppointmentById(detailedAppointments[i].appointmentId);
+        if (details) {
+          detailedAppointments[i] = details;
+        }
+      } catch (error) {
+        console.error(`Failed to fetch details for appointment ${detailedAppointments[i].appointmentId}`, error);
+      }
+    }
+    
+    setDetailsLoading(false);
+    return detailedAppointments;
+  };
 
   useEffect(() => {
     const now = new Date();
@@ -26,6 +52,13 @@ export default function AppointmentList() {
             appointment.status !== 'cancelled'
         );
         setFilteredAppointments(upcoming);
+        
+        // If user is a doctor, fetch detailed patient info for each appointment
+        if (user?.role === 'doctor') {
+          fetchDetailedAppointments(upcoming).then(setEnrichedAppointments);
+        } else {
+          setEnrichedAppointments(upcoming);
+        }
       } else {
         const past = appointments.filter(
           (appointment) => 
@@ -33,11 +66,19 @@ export default function AppointmentList() {
             appointment.status === 'cancelled'
         );
         setFilteredAppointments(past);
+        
+        // If user is a doctor, fetch detailed patient info for each appointment
+        if (user?.role === 'doctor') {
+          fetchDetailedAppointments(past).then(setEnrichedAppointments);
+        } else {
+          setEnrichedAppointments(past);
+        }
       }
     } else {
       setFilteredAppointments([]);
+      setEnrichedAppointments([]);
     }
-  }, [appointments, activeTab]);
+  }, [appointments, activeTab, user, fetchAppointmentById]);
 
   const handleCancelAppointment = async (appointmentId: string) => {
     if (confirm('Are you sure you want to cancel this appointment?')) {
@@ -88,6 +129,8 @@ export default function AppointmentList() {
     );
   }
 
+  const displayAppointments = enrichedAppointments.length > 0 ? enrichedAppointments : filteredAppointments;
+
   return (
     <div>
       <div className="flex border-b border-gray-200 mb-6">
@@ -125,6 +168,14 @@ export default function AppointmentList() {
         </button>
       </div>
 
+      {detailsLoading && user?.role === 'doctor' && (
+        <div className="text-center py-2 mb-4">
+          <div className="inline-block animate-pulse text-sm text-gray-500">
+            Loading patient details...
+          </div>
+        </div>
+      )}
+
       <motion.div 
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
         variants={containerVariants}
@@ -133,8 +184,8 @@ export default function AppointmentList() {
         key={activeTab}
       >
         <AnimatePresence>
-          {filteredAppointments.length > 0 ? (
-            filteredAppointments.map((appointment) => (
+          {displayAppointments.length > 0 ? (
+            displayAppointments.map((appointment) => (
               <motion.div key={appointment.appointmentId} variants={itemVariants} layout>
                 <AppointmentCard 
                   appointment={appointment} 

@@ -32,7 +32,7 @@ export interface Appointment {
   doctorDetails?: Doctor;
 }
 
-export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'completed';
+export type AppointmentStatus = 'pending' | 'scheduled' | 'confirmed' | 'cancelled' | 'completed';
 
 export interface CreateAppointmentPayload {
   patientId: string;
