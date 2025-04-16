@@ -41,6 +41,7 @@ export interface UpdateProfileFormData {
   firstName: string;
   lastName: string;
   profileImage?: string;
+  specialization?: string;
 }
 
 export interface AuthResponse {

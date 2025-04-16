@@ -135,6 +135,8 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     
+    console.log('Updating profile with data:', data);
+    
     try {
       // First update profile data
       const profileResponse = await fetch(`${API_URL}/users/profile`, {
@@ -146,10 +148,12 @@ export function useAuth() {
         body: JSON.stringify({
           firstName: data.firstName,
           lastName: data.lastName,
+          specialization: data.specialization,
         }),
       });
       
       const profileData = await profileResponse.json();
+      console.log('Profile update response:', profileData);
       
       if (!profileResponse.ok) {
         throw new Error(profileData.message || 'Failed to update profile');
@@ -180,6 +184,8 @@ export function useAuth() {
           userData = imageData.user || imageData;
         }
       }
+      
+      console.log('Final user data being stored:', userData);
       
       // Update user in store
       updateUser(userData);

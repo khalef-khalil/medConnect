@@ -305,7 +305,7 @@ exports.updateProfile = async (req, res) => {
   try {
     // User ID comes from JWT token via middleware
     const { userId } = req.user;
-    const { firstName, lastName, phone } = req.body;
+    const { firstName, lastName, phone, specialization } = req.body;
 
     // Build update expression dynamically based on what fields are provided
     let updateExpression = 'set updatedAt = :updatedAt';
@@ -326,6 +326,12 @@ exports.updateProfile = async (req, res) => {
     if (phone) {
       updateExpression += ', phone = :phone';
       expressionAttributeValues[':phone'] = phone;
+    }
+    
+    // Add support for specialization field (for doctors)
+    if (specialization !== undefined) {
+      updateExpression += ', specialization = :specialization';
+      expressionAttributeValues[':specialization'] = specialization;
     }
 
     const params = {

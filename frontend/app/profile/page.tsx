@@ -13,6 +13,25 @@ import AuthLayout from '../components/layout/AuthLayout';
 import FormInput from '../components/auth/FormInput';
 import FormButton from '../components/auth/FormButton';
 
+const specializationOptions = [
+  { value: '', label: 'Select a specialization' },
+  { value: 'Cardiology', label: 'Cardiology' },
+  { value: 'Dermatology', label: 'Dermatology' },
+  { value: 'Endocrinology', label: 'Endocrinology' },
+  { value: 'Gastroenterology', label: 'Gastroenterology' },
+  { value: 'General Practice', label: 'General Practice' },
+  { value: 'Neurology', label: 'Neurology' },
+  { value: 'Obstetrics & Gynecology', label: 'Obstetrics & Gynecology' },
+  { value: 'Oncology', label: 'Oncology' },
+  { value: 'Ophthalmology', label: 'Ophthalmology' },
+  { value: 'Orthopedics', label: 'Orthopedics' },
+  { value: 'Pediatrics', label: 'Pediatrics' },
+  { value: 'Psychiatry', label: 'Psychiatry' },
+  { value: 'Pulmonology', label: 'Pulmonology' },
+  { value: 'Radiology', label: 'Radiology' },
+  { value: 'Urology', label: 'Urology' },
+];
+
 export default function ProfilePage() {
   const { user } = useAuthStore();
   const { updateProfile, loading, error } = useAuth();
@@ -24,13 +43,19 @@ export default function ProfilePage() {
       firstName: '',
       lastName: '',
       profileImage: '',
+      specialization: '',
     }
   });
 
   useEffect(() => {
+    console.log('User data in profile page:', user);
     if (user) {
       setValue('firstName', user.firstName);
       setValue('lastName', user.lastName);
+      if (user.specialization) {
+        console.log('Setting specialization value to:', user.specialization);
+        setValue('specialization', user.specialization);
+      }
       if (user.profileImage) {
         setValue('profileImage', user.profileImage);
         setImagePreview(user.profileImage);
@@ -53,8 +78,10 @@ export default function ProfilePage() {
   };
 
   const onSubmit = async (data: UpdateProfileFormData) => {
+    console.log('Submitting profile form with data:', data);
     try {
-      await updateProfile(data);
+      const updatedUser = await updateProfile(data);
+      console.log('Profile updated, received user data:', updatedUser);
       toast.success('Profile updated successfully!');
     } catch (err) {
       toast.error(error || 'Failed to update profile. Please try again.');
@@ -160,6 +187,31 @@ export default function ProfilePage() {
                     />
                   </div>
 
+                  {/* Specialization - For Doctors Only */}
+                  {user?.role === 'doctor' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Specialization</label>
+                      <select
+                        className="input-field"
+                        {...register('specialization')}
+                      >
+                        {specializationOptions.map(option => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.specialization && (
+                        <p className="mt-1 text-xs text-red-500">
+                          {errors.specialization.message}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">
+                        Choose your medical specialization to help patients find you
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex justify-end gap-3 pt-4">
                     <FormButton 
                       type="button" 
@@ -168,6 +220,7 @@ export default function ProfilePage() {
                         firstName: user?.firstName || '',
                         lastName: user?.lastName || '',
                         profileImage: user?.profileImage || '',
+                        specialization: user?.specialization || '',
                       })}
                       disabled={loading}
                     >
