@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Appointment } from '../../types/appointment';
 import { useAppointments } from '../../hooks/useAppointments';
 import { useAuthStore } from '../../store/authStore';
+import { useVideo } from '../../hooks/useVideo';
 
 interface AppointmentDetailsProps {
   appointment: Appointment;
@@ -13,9 +14,111 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
   const router = useRouter();
   const { user } = useAuthStore();
   const { updateExistingAppointment, removeAppointment } = useAppointments();
+  const { getVideoSession } = useVideo();
   const [loading, setLoading] = useState<boolean>(false);
   const [statusLoading, setStatusLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExists, setSessionExists] = useState<boolean>(false);
+  const [checkingSession, setCheckingSession] = useState<boolean>(false);
+  
+  // New state to handle limited checking
+  const [checkCount, setCheckCount] = useState<number>(0);
+  const [lastCheckTime, setLastCheckTime] = useState<number>(0);
+  const [checkLimitReached, setCheckLimitReached] = useState<boolean>(false);
+  const checkTimeout = useRef<NodeJS.Timeout | null>(null);
+  
+  // Constants for session checking limits
+  const MAX_CHECKS = 3;
+  const CHECK_WINDOW = 30000; // 30 seconds window for checks
+  
+  const isDoctor = () => {
+    return user?.role === 'doctor' && user?.userId === appointment.doctorId;
+  };
+  
+  // Reset the check count after the time window expires
+  useEffect(() => {
+    if (checkLimitReached) {
+      checkTimeout.current = setTimeout(() => {
+        setCheckCount(0);
+        setCheckLimitReached(false);
+      }, CHECK_WINDOW);
+      
+      return () => {
+        if (checkTimeout.current) {
+          clearTimeout(checkTimeout.current);
+        }
+      };
+    }
+  }, [checkLimitReached]);
+  
+  // Modified useEffect for checking sessions with rate limiting
+  useEffect(() => {
+    const checkSession = async () => {
+      if (!appointment || !isUpcoming() || appointment.status !== 'confirmed') return;
+      
+      // Only need to check for session if the user is a patient
+      if (!isDoctor()) {
+        // Check if we've reached the rate limit
+        const currentTime = Date.now();
+        if (currentTime - lastCheckTime < CHECK_WINDOW) {
+          // We're within the check window
+          if (checkCount >= MAX_CHECKS) {
+            setCheckLimitReached(true);
+            return;
+          }
+        } else {
+          // Outside the window, reset the count
+          setCheckCount(0);
+          setCheckLimitReached(false);
+        }
+        
+        setCheckingSession(true);
+        try {
+          // Increment check count
+          setCheckCount(prev => prev + 1);
+          setLastCheckTime(currentTime);
+          
+          const session = await getVideoSession(appointment.appointmentId);
+          setSessionExists(!!session);
+          
+          // Reset check count if successful
+          if (!!session) {
+            setCheckCount(0);
+            setCheckLimitReached(false);
+          }
+        } catch (err) {
+          console.error('Error checking video session:', err);
+        } finally {
+          setCheckingSession(false);
+        }
+      }
+    };
+    
+    checkSession();
+    
+    // Poll for session existence with rate limiting
+    let interval: NodeJS.Timeout | null = null;
+    if (!isDoctor() && appointment.status === 'confirmed' && isUpcoming()) {
+      interval = setInterval(() => {
+        // Check if component is still mounted before proceeding
+        if (document.body.contains(document.getElementById(`appointment-${appointment.appointmentId}`)) && !checkLimitReached) {
+          checkSession();
+        } else if (checkLimitReached) {
+          // If we've reached the limit, don't try to check again until the window resets
+          console.log(`Check limit reached (${MAX_CHECKS} checks in ${CHECK_WINDOW/1000} seconds). Waiting to reset.`);
+        } else if (interval) {
+          // Clean up if component is no longer in DOM
+          clearInterval(interval);
+        }
+      }, 15000); // 15 seconds between polls
+    }
+    
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [appointment, getVideoSession, checkLimitReached, checkCount, lastCheckTime]);
   
   // Format date and time
   const formatDate = (dateString: string) => {
@@ -69,10 +172,6 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
     return appointmentDate > now && appointment.status !== 'cancelled';
   };
 
-  const isDoctor = () => {
-    return user?.role === 'doctor' && user?.userId === appointment.doctorId;
-  };
-
   const handleCancel = async () => {
     if (confirm('Are you sure you want to cancel this appointment?')) {
       setLoading(true);
@@ -107,8 +206,13 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
     }
   };
 
+  // Determine if the join video button should be shown and if it should be enabled
+  const showJoinVideoButton = appointment.status === 'confirmed' && isUpcoming();
+  const isJoinButtonEnabled = isDoctor() || sessionExists;
+
   return (
     <motion.div
+      id={`appointment-${appointment.appointmentId}`}
       className="bg-white rounded-xl shadow-sm overflow-hidden"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -291,18 +395,53 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
             </motion.button>
           )}
           
-          {appointment.status === 'confirmed' && isUpcoming() && (
+          {/* Video call button - conditionally enabled based on role, session existence, and rate limits */}
+          {showJoinVideoButton && (
             <motion.button
-              className="px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => router.push(`/video/${appointment.appointmentId}`)}
+              className={`px-6 py-3 ${isJoinButtonEnabled ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'} text-white rounded-lg transition-colors flex items-center`}
+              whileHover={isJoinButtonEnabled ? { scale: 1.02 } : {}}
+              whileTap={isJoinButtonEnabled ? { scale: 0.98 } : {}}
+              onClick={isJoinButtonEnabled ? () => router.push(`/video/${appointment.appointmentId}`) : undefined}
+              disabled={!isJoinButtonEnabled || checkingSession || checkLimitReached}
             >
-              Join Video Call
+              {checkingSession ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  Checking availability...
+                </>
+              ) : checkLimitReached ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Try again in a moment
+                </>
+              ) : !isDoctor() && !sessionExists ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  Waiting for doctor
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Join Video Call
+                </>
+              )}
             </motion.button>
           )}
         </div>
       </div>
+      
+      {/* Optional: Show a message when rate limit has been reached */}
+      {checkLimitReached && !isDoctor() && !sessionExists && showJoinVideoButton && (
+        <div className="mt-3 text-xs text-gray-500 text-right">
+          Checking paused to reduce server load. Will resume automatically.
+        </div>
+      )}
     </motion.div>
   );
 }

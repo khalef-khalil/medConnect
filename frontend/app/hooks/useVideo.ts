@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuthStore } from '../store/authStore';
 import { getApiBaseUrl } from '../lib/networkUtils';
@@ -7,6 +7,10 @@ import { getApiBaseUrl } from '../lib/networkUtils';
 const API_BASE_URL = getApiBaseUrl();
 
 console.log(`[useVideo] Using API base URL: ${API_BASE_URL}`);
+
+// Constants for rate limiting
+const MAX_API_CALLS = 3;       // Maximum API calls
+const API_CALL_WINDOW = 30000; // 30 second window for API calls
 
 interface WebRTCConfig {
   sessionId: string;
@@ -25,6 +29,8 @@ export interface VideoSession {
   patientId: string;
   doctorId: string;
   webrtcConfig: WebRTCConfig;
+  waitingRoomStatus?: Record<string, any>; // Add waitingRoomStatus to track patients waiting
+  participants?: Array<any>; // Optional participants array
 }
 
 interface VideoSessionState {
@@ -43,6 +49,15 @@ export const useVideo = () => {
   
   // Cache last successful session to reduce API calls
   const [cachedSession, setCachedSession] = useState<VideoSession | null>(null);
+  // Track consecutive 404 errors
+  const [consecutive404s, setConsecutive404s] = useState(0);
+  const MAX_404_RETRIES = 3;
+  
+  // Rate limiting state
+  const [apiCallCount, setApiCallCount] = useState(0);
+  const [lastApiCallTime, setLastApiCallTime] = useState(0);
+  const [rateLimitReached, setRateLimitReached] = useState(false);
+  const rateLimitTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const resetState = () => {
     setState({
@@ -51,7 +66,30 @@ export const useVideo = () => {
       error: null,
     });
     setCachedSession(null);
+    setConsecutive404s(0);
+    setApiCallCount(0);
+    setRateLimitReached(false);
+    if (rateLimitTimeout.current) {
+      clearTimeout(rateLimitTimeout.current);
+      rateLimitTimeout.current = null;
+    }
   };
+  
+  // Reset rate limit after the window expires
+  useEffect(() => {
+    if (rateLimitReached) {
+      rateLimitTimeout.current = setTimeout(() => {
+        setApiCallCount(0);
+        setRateLimitReached(false);
+      }, API_CALL_WINDOW);
+      
+      return () => {
+        if (rateLimitTimeout.current) {
+          clearTimeout(rateLimitTimeout.current);
+        }
+      };
+    }
+  }, [rateLimitReached]);
 
   // Get current JWT token (use store token first, fallback to localStorage)
   const getAuthToken = useCallback(() => {
@@ -88,8 +126,50 @@ export const useVideo = () => {
       resetState();
     }
   }, [isAuthenticated]);
+  
+  // Helper function to track API calls and check rate limits
+  const trackApiCall = useCallback(() => {
+    const currentTime = Date.now();
+    
+    // Check if we're within the rate limiting window
+    if (currentTime - lastApiCallTime < API_CALL_WINDOW) {
+      // We're within the window, increment the count
+      const newCallCount = apiCallCount + 1;
+      setApiCallCount(newCallCount);
+      
+      // Check if we've reached the limit
+      if (newCallCount >= MAX_API_CALLS) {
+        console.warn(`[useVideo] Rate limit reached: ${MAX_API_CALLS} calls in ${API_CALL_WINDOW/1000} seconds`);
+        setRateLimitReached(true);
+        return false;
+      }
+    } else {
+      // We're outside the window, reset the count
+      setApiCallCount(1);
+      setRateLimitReached(false);
+    }
+    
+    // Update the last call time
+    setLastApiCallTime(currentTime);
+    return true;
+  }, [apiCallCount, lastApiCallTime]);
 
   const createVideoSession = async (appointmentId: string) => {
+    // Check rate limiting first
+    if (rateLimitReached) {
+      console.warn(`[createVideoSession] Rate limit reached, not making API call`);
+      setState(prev => ({
+        ...prev,
+        error: "Too many requests. Please try again in a moment."
+      }));
+      return null;
+    }
+    
+    // Track this API call
+    if (!trackApiCall()) {
+      return null;
+    }
+    
     setState({
       session: null,
       loading: true,
@@ -128,6 +208,7 @@ export const useVideo = () => {
       });
       
       setCachedSession(session);
+      setConsecutive404s(0); // Reset 404 counter on success
       return session;
     } catch (error) {
       if (axios.isAxiosError(error)) {
@@ -161,6 +242,22 @@ export const useVideo = () => {
   };
 
   const getVideoSession = useCallback(async (appointmentId: string) => {
+    // Check rate limiting first
+    if (rateLimitReached) {
+      console.warn(`[getVideoSession] Rate limit reached, not making API call`);
+      setState(prev => ({
+        ...prev,
+        loading: false,
+        error: "Too many requests. Please try again in a moment."
+      }));
+      return cachedSession;
+    }
+    
+    // Track this API call
+    if (!trackApiCall()) {
+      return cachedSession;
+    }
+    
     setState(prev => ({
       ...prev,
       loading: true,
@@ -206,12 +303,29 @@ export const useVideo = () => {
       });
       
       setCachedSession(session);
+      setConsecutive404s(0); // Reset 404 counter on success
       return session;
     } catch (error) {
       if (axios.isAxiosError(error)) {
         // If the error is 404, it means there's no session yet, which is not an error
         if (error.response?.status === 404) {
           console.log(`[getVideoSession] No session found for appointment ${appointmentId}`);
+          
+          // Increment the 404 counter
+          const new404Count = consecutive404s + 1;
+          setConsecutive404s(new404Count);
+          
+          // If we've had too many 404s in a row, report an error
+          if (new404Count >= MAX_404_RETRIES) {
+            console.warn(`[getVideoSession] Too many 404 responses (${new404Count}), reporting error`);
+            setState(prev => ({
+              ...prev,
+              loading: false,
+              error: "No video session is available. The doctor may not have started the call yet.",
+            }));
+            return null;
+          }
+          
           setState(prev => ({
             ...prev,
             loading: false,
@@ -258,7 +372,7 @@ export const useVideo = () => {
       // Return cached data if available, to reduce repeated error states
       return cachedSession;
     }
-  }, [cachedSession, getAuthToken]);
+  }, [cachedSession, getAuthToken, consecutive404s, rateLimitReached, trackApiCall]);
 
   const joinWaitingRoom = async (appointmentId: string) => {
     setState({
@@ -568,5 +682,6 @@ export const useVideo = () => {
     admitPatient,
     toggleScreenSharing,
     resetState,
+    rateLimitReached, // Export this so components can know about rate limiting
   };
 }; 

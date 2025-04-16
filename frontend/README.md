@@ -1,33 +1,81 @@
 # MedConnect Frontend
 
-This is the frontend application for MedConnect, a comprehensive telemedicine platform designed to facilitate remote healthcare services between patients and medical professionals.
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+This is the frontend for the MedConnect telemedicine platform, a comprehensive solution for remote healthcare services.
 
 ## Features
 
-The frontend implements all core features of the MedConnect platform:
+- Appointment scheduling and management
+- Video consultations with WebRTC
+- Secure messaging between patients and doctors
+- Interactive calendar for appointment booking
+- Integrated payment system
+- Role-based access control
 
-- User authentication and role-based access
-- Interactive appointment scheduling
-- Real-time video consultations
-- Secure messaging
-- Integrated payment processing
-- Notifications system
+## Running the Application
+
+### Standard Development Mode
+
+```bash
+# Install dependencies
+npm install
+
+# Run the development server
+npm run dev
+```
+
+### HTTPS Mode (Recommended for Video Calls)
+
+For video calls to work properly, the application should run over HTTPS to get access to camera and microphone permissions. We've provided a secure start script:
+
+```bash
+# Make the script executable (if needed)
+chmod +x scripts/start-secure.sh
+
+# Run the frontend with HTTPS enabled
+./scripts/start-secure.sh
+```
+
+This will start the development server on port 3000 with HTTPS enabled. You'll need to accept the self-signed certificate in your browser.
+
+### Backend Configuration
+
+The frontend is configured to connect to a backend API running on:
+- HTTP: Port 3001
+- HTTPS: Port 3443
+
+Make sure your backend is running on these ports or update the `.env.local` file with the correct configuration.
+
+## Video Call Flow
+
+The video call functionality follows this flow:
+
+1. Doctor creates a video call session for a confirmed appointment
+2. When the doctor joins, the doctor is immediately in the active call
+3. Patient sees "Join Video Call" button enabled once the doctor has created the session
+4. Patient clicks the button and enters a virtual waiting room
+5. Doctor gets notification of patient in waiting room
+6. Doctor admits the patient from the waiting room interface
+7. Patient automatically joins the call after being admitted
+
+## Environment Variables
+
+Configure the application by creating a `.env.local` file:
+
+```
+# API Configuration
+NEXT_PUBLIC_API_PORT=3001
+NEXT_PUBLIC_API_HTTPS_PORT=3443
+
+# Video call configuration
+NEXT_PUBLIC_USE_DYNAMIC_IP=true
+
+# Connection retry configuration
+NEXT_PUBLIC_MAX_CONNECTION_RETRIES=3
+```
+
+## Browser Support
+
+For best results, use Chrome, Firefox, or Edge. Safari has some limitations with WebRTC.
 
 ## Development Approach
 

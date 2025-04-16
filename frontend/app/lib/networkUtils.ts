@@ -135,61 +135,54 @@ async function findWorkingApiUrl(currentUrl: string): Promise<string> {
 }
 
 /**
- * Creates API URLs based on current network environment
+ * Gets the base URL for API requests dynamically, handling HTTPS and fallbacks
  */
-export function getApiBaseUrl() {
-  // Use cached value if available
-  if (currentApiBaseUrl) {
-    // Refresh connection test in the background
-    findWorkingApiUrl(currentApiBaseUrl).then(url => {
-      if (url !== currentApiBaseUrl) {
-        currentApiBaseUrl = url;
-      }
-    });
-    
-    return currentApiBaseUrl;
-  }
+export const getApiBaseUrl = (): string => {
+  // Use Next.js public runtime configuration
+  const apiPort = process.env.NEXT_PUBLIC_API_PORT || '3001';
+  const apiHttpsPort = process.env.NEXT_PUBLIC_API_HTTPS_PORT || '3443';
+  const useDynamicIp = process.env.NEXT_PUBLIC_USE_DYNAMIC_IP === 'true';
   
-  // In browser environment
+  // Get fallback URLs from environment
+  const fallbackUrls = process.env.NEXT_PUBLIC_API_FALLBACK_URLS?.split(',') || [];
+  
+  // Default to current window location for hostname (works in browser only)
+  let baseUrl = '';
+  
+  // In browser context
   if (typeof window !== 'undefined') {
-    try {
-      // Check for environment variable (set in .env.local)
-      if (process.env.NEXT_PUBLIC_API_URL) {
-        currentApiBaseUrl = process.env.NEXT_PUBLIC_API_URL.replace('/api/v1', '');
-        return currentApiBaseUrl;
-      }
-      
-      // Use the same protocol as the frontend (HTTPS or HTTP)
-      const protocol = window.location.protocol;
-      const hostname = window.location.hostname;
-      const port = protocol === 'https:' ? 
-                  (process.env.NEXT_PUBLIC_API_HTTPS_PORT || '3443') : 
-                  (process.env.NEXT_PUBLIC_API_PORT || '3001');
-      
-      // Create the URL with matching protocol
-      const apiUrl = `${protocol}//${hostname}:${port}`;
-      
-      // Test connection in the background and update if needed
-      findWorkingApiUrl(apiUrl).then(url => {
-        currentApiBaseUrl = url;
-      });
-      
-      // Return immediate result while test runs in background
-      currentApiBaseUrl = apiUrl;
-      return apiUrl;
-    } catch (error) {
-      console.error('Error generating API URL:', error);
-      // Fallback to localhost with appropriate protocol
-      const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
-      currentApiBaseUrl = `${protocol}//localhost:${protocol === 'https:' ? '3443' : '3001'}`;
-      return currentApiBaseUrl;
+    const protocol = window.location.protocol;
+    const hostname = window.location.hostname;
+    
+    // Always prefer HTTPS for video calls to get camera/mic permissions
+    const useHttps = protocol === 'https:';
+    const port = useHttps ? apiHttpsPort : apiPort;
+    
+    // Build the base URL
+    baseUrl = `${useHttps ? 'https' : 'http'}://${hostname}:${port}`;
+    
+    // Validate created URL with a simple regex
+    if (!/^(http|https):\/\/[^\s$.?#].[^\s]*$/.test(baseUrl)) {
+      console.warn(`[networkUtils] Generated invalid base URL: ${baseUrl}, falling back to localhost`);
+      baseUrl = useHttps ? `https://localhost:${apiHttpsPort}` : `http://localhost:${apiPort}`;
     }
+    
+    // Log which URL we're using
+    console.log(`[networkUtils] Using API base URL: ${baseUrl} (${useHttps ? 'HTTPS' : 'HTTP'})`);
+  } else {
+    // Server-side rendering - use localhost
+    baseUrl = `http://localhost:${apiPort}`;
   }
   
-  // Default for server-side rendering
-  currentApiBaseUrl = 'http://localhost:3001';
-  return currentApiBaseUrl;
-}
+  return baseUrl;
+};
+
+/**
+ * Utility to check if the current environment is in development mode
+ */
+export const isDevelopment = (): boolean => {
+  return process.env.NODE_ENV === 'development';
+};
 
 /**
  * Get full API URL with /api/v1 path

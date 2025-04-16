@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { toast } from 'react-toastify';
 
 interface Patient {
   userId: string;
@@ -13,13 +14,47 @@ interface Patient {
 interface DoctorWaitingRoomProps {
   waitingPatients: Patient[];
   onAdmitPatient: (patientId: string) => void;
+  appointmentId?: string; // Add appointmentId to support empty state actions
 }
 
 export default function DoctorWaitingRoom({
   waitingPatients,
   onAdmitPatient,
+  appointmentId,
 }: DoctorWaitingRoomProps) {
   const [admittingPatient, setAdmittingPatient] = useState<string | null>(null);
+  const [hasNotified, setHasNotified] = useState<boolean>(false);
+  const [manualAdmitId, setManualAdmitId] = useState<string>('');
+  const [showNewPatientBanner, setShowNewPatientBanner] = useState<boolean>(false);
+  
+  // Show visible notification when a patient joins
+  useEffect(() => {
+    if (waitingPatients.length > 0 && !hasNotified) {
+      // Show a prominent toast notification
+      toast.info('A patient is waiting to join the call!', {
+        position: "top-center",
+        autoClose: false,
+        hideProgressBar: false,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      });
+      
+      // Also show a banner in the waiting room
+      setShowNewPatientBanner(true);
+      
+      // Hide the banner after 10 seconds
+      setTimeout(() => {
+        setShowNewPatientBanner(false);
+      }, 10000);
+      
+      setHasNotified(true);
+    } else if (waitingPatients.length === 0) {
+      setHasNotified(false);
+      setShowNewPatientBanner(false);
+    }
+  }, [waitingPatients.length, hasNotified]);
 
   const formatWaitingTime = (waitingSince: number) => {
     const now = Date.now();
@@ -45,17 +80,44 @@ export default function DoctorWaitingRoom({
     onAdmitPatient(patientId);
   };
   
+  const handleManualAdmitSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (manualAdmitId) {
+      handleAdmitClick(manualAdmitId);
+    } else {
+      // If no ID is provided, use the appointmentId's patient ID
+      // which will be handled in the parent component
+      handleAdmitClick("auto-admit");
+    }
+  };
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="bg-white rounded-xl shadow-sm overflow-hidden p-6"
+      className="bg-white rounded-xl shadow-sm overflow-hidden p-6 relative"
     >
+      {/* New patient notification banner */}
+      {showNewPatientBanner && (
+        <motion.div 
+          className="absolute top-0 left-0 right-0 bg-red-600 text-white py-3 px-4 text-center font-bold"
+          initial={{ y: -50 }}
+          animate={{ y: 0 }}
+          exit={{ y: -50 }}
+        >
+          🔔 New patient waiting! Please admit them to start the call
+        </motion.div>
+      )}
+      
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-gray-900">Waiting Room</h2>
         {waitingPatients.length > 0 && (
-          <div className="flex items-center">
+          <motion.div 
+            className="flex items-center"
+            animate={{ scale: [1, 1.1, 1] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+          >
             <span className="relative flex h-3 w-3 mr-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
@@ -63,7 +125,7 @@ export default function DoctorWaitingRoom({
             <span className="text-sm font-medium text-red-600">
               {waitingPatients.length} patient{waitingPatients.length !== 1 ? 's' : ''} waiting
             </span>
-          </div>
+          </motion.div>
         )}
       </div>
       
@@ -72,7 +134,58 @@ export default function DoctorWaitingRoom({
           <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto text-gray-300 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <p className="text-gray-500">No patients are waiting at the moment.</p>
+          <p className="text-gray-500 mb-6">No patients are waiting at the moment.</p>
+          
+          {/* Manual admit section */}
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg text-left">
+            <h3 className="text-sm font-medium text-blue-700 mb-2">Can't see the patient?</h3>
+            <p className="text-sm text-blue-600 mb-4">
+              If the patient says they're waiting but you don't see them here, 
+              you can try admitting them manually:
+            </p>
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => handleAdmitClick("auto-admit")}
+              className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium 
+                         flex items-center justify-center"
+              disabled={admittingPatient !== null}
+            >
+              {admittingPatient ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
+                  Admitting...
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                  </svg>
+                  Auto-Admit Patient from Appointment
+                </>
+              )}
+            </motion.button>
+            
+            <div className="mt-4">
+              <p className="text-xs text-gray-500 mb-2">Or enter a specific patient ID:</p>
+              <form onSubmit={handleManualAdmitSubmit} className="flex">
+                <input
+                  type="text"
+                  value={manualAdmitId}
+                  onChange={(e) => setManualAdmitId(e.target.value)}
+                  placeholder="Patient ID"
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-l-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-2 bg-gray-600 text-white rounded-r-lg text-sm font-medium"
+                  disabled={admittingPatient !== null}
+                >
+                  Admit
+                </button>
+              </form>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
@@ -82,12 +195,17 @@ export default function DoctorWaitingRoom({
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.3 }}
-              className="bg-gray-50 p-4 rounded-lg flex items-center justify-between border-l-4 border-yellow-400"
+              className="bg-yellow-50 p-4 rounded-lg flex items-center justify-between border-l-4 border-yellow-400"
             >
               <div>
-                <h3 className="font-medium text-gray-900">
-                  {patient.firstName} {patient.lastName}
-                </h3>
+                <div className="flex items-center mb-1">
+                  <h3 className="font-medium text-gray-900">
+                    {patient.firstName} {patient.lastName}
+                  </h3>
+                  <span className="ml-2 px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs rounded-full animate-pulse">
+                    Waiting to Join
+                  </span>
+                </div>
                 <p className="text-sm text-gray-500">
                   Waiting for {formatWaitingTime(patient.waitingSince)}
                 </p>

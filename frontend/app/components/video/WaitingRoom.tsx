@@ -23,6 +23,11 @@ export default function WaitingRoom({
   const [waitingTime, setWaitingTime] = useState<number>(0);
   const [hasClickedReady, setHasClickedReady] = useState<boolean>(false);
   const [showTransition, setShowTransition] = useState<boolean>(false);
+  const [waitingStatus, setWaitingStatus] = useState<string>(''); // Track waiting state messages
+  const [waitingTooLong, setWaitingTooLong] = useState<boolean>(false); // Track if waiting for too long
+  
+  // Constants for timing checks
+  const WAITING_TOO_LONG_THRESHOLD = 30000; // 30 seconds
   
   // If patient is admitted, show a transition animation before redirecting
   useEffect(() => {
@@ -56,12 +61,25 @@ export default function WaitingRoom({
     }
   }, [appointmentTime]);
   
+  // Track waiting time and update status messages
   useEffect(() => {
-    if (waitingSince) {
+    if (waitingSince && hasClickedReady) {
       const calculateWaitingTime = () => {
         const now = Date.now();
         const waiting = Math.floor((now - waitingSince) / 1000); // seconds
         setWaitingTime(waiting);
+        
+        // Update waiting status message based on time elapsed
+        if (waiting > 120) { // More than 2 minutes
+          setWaitingStatus('The doctor appears to be busy. Please continue to wait or check back later.');
+          setWaitingTooLong(true);
+        } else if (waiting > 60) { // More than 1 minute
+          setWaitingStatus('The doctor may be finishing up with another patient. Please wait...');
+        } else if (waiting > 30) { // More than 30 seconds
+          setWaitingStatus('Connecting to the doctor. This should only take a moment...');
+        } else {
+          setWaitingStatus('The doctor will admit you shortly. Please wait...');
+        }
       };
       
       calculateWaitingTime();
@@ -69,7 +87,7 @@ export default function WaitingRoom({
       
       return () => clearInterval(interval);
     }
-  }, [waitingSince]);
+  }, [waitingSince, hasClickedReady]);
   
   const formatTime = (seconds: number) => {
     if (seconds < 60) {
@@ -97,6 +115,7 @@ export default function WaitingRoom({
   
   const handleReadyClick = () => {
     setHasClickedReady(true);
+    setWaitingStatus('The doctor will admit you shortly. Please wait...');
     
     // Store in localStorage to prevent repeated API calls if user refreshes
     localStorage.setItem('patientReady', JSON.stringify({
@@ -105,6 +124,21 @@ export default function WaitingRoom({
     }));
     
     // Call the ready handler
+    onReady();
+  };
+  
+  // Handle retry when waiting too long
+  const handleRetry = () => {
+    setWaitingTooLong(false);
+    setWaitingStatus('Retrying connection. Please wait...');
+    
+    // Reset the waiting timestamp to make it feel like a fresh attempt
+    localStorage.setItem('patientReady', JSON.stringify({
+      appointmentTime,
+      timestamp: Date.now()
+    }));
+    
+    // Call the ready handler again
     onReady();
   };
   
@@ -173,7 +207,7 @@ export default function WaitingRoom({
             </h2>
             <p className="text-gray-600">
               {hasClickedReady 
-                ? 'The doctor will admit you shortly. Please wait...' 
+                ? (waitingStatus || 'The doctor will admit you shortly. Please wait...') 
                 : (waitingSince ? `Waiting for ${waitingTime > 0 ? formatTime(waitingTime) : 'a moment'}` : 'Please wait while we prepare your appointment')}
             </p>
           </div>
@@ -199,9 +233,21 @@ export default function WaitingRoom({
                 <div className="mb-4">
                   <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-primary-600"></div>
                 </div>
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-gray-700 mb-4">
                   When the doctor admits you, your call will start automatically.
                 </p>
+                
+                {/* Show retry button if waiting too long */}
+                {waitingTooLong && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="px-6 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors text-sm"
+                    onClick={handleRetry}
+                  >
+                    Retry Connection
+                  </motion.button>
+                )}
               </div>
             ) : (
               <>

@@ -35,6 +35,13 @@ interface WaitingPatient {
   waitingSince: number;
 }
 
+// Add an interface for the session participant
+interface SessionParticipant {
+  userId: string;
+  role: string;
+  status: string;
+}
+
 export default function VideoPage({ params }: VideoPageProps) {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
@@ -53,6 +60,11 @@ export default function VideoPage({ params }: VideoPageProps) {
   const isDoctor = user?.role === 'doctor';
   const initRef = useRef(false);
   const sessionInitialized = useRef(false);
+  const hasClickedReadyRef = useRef(false);
+  
+  // Refs for admission status checking rate limiting
+  const checkCountRef = useRef(0);
+  const lastCheckTimeRef = useRef(0);
   
   // Track patient admission status
   const [patientAdmitted, setPatientAdmitted] = useState<boolean>(false);
@@ -228,11 +240,54 @@ export default function VideoPage({ params }: VideoPageProps) {
                 return;
               }
             }
-            // For demo purposes, just show the doctor waiting room
-            // The active call will be triggered when they admit a patient
+            // After creating the session, doctor is automatically in the call
+            setIsCallActive(true);
+            
+            // Set doctor as ready for waiting room
+            if (created) {
+              console.log("Doctor session created successfully, now active in call");
+            }
           } else {
             console.log("User is patient, joining waiting room...");
-            // If user is a patient, join waiting room
+            // If user is a patient and there's no session, they can't join yet
+            // We'll show a message that they need to wait for the doctor to start the call
+            toast.info("Please wait for the doctor to start the video call session");
+            
+            // Stop showing loading/checking state and return to appointment page
+            setIsCallActive(false);
+            setIsWaiting(false);
+            router.push(`/appointments/${params.appointmentId}`);
+            return;
+          }
+        } else {
+          console.log("Found existing session:", 
+            {
+              sessionId: existingSession.sessionId,
+              status: existingSession.status,
+              patientId: existingSession.patientId,
+              doctorId: existingSession.doctorId
+            });
+          
+          // If user is a doctor and they're returning to an existing session
+          if (isDoctor) {
+            console.log("Doctor rejoining existing session");
+            setIsCallActive(true);
+          } else {
+            // If user is a patient, they need to join the waiting room
+            console.log("Patient joining existing session");
+            
+            // Check if there's a waiting room enabled flag in the webrtcConfig
+            const waitingRoomEnabled = existingSession.webrtcConfig?.waitingRoomEnabled;
+            
+            if (waitingRoomEnabled === false) {
+              // If waiting room is disabled, patient can directly join call
+              console.log("Waiting room is disabled, patient can directly join call");
+              setIsCallActive(true);
+              setIsWaiting(false);
+              setPatientAdmitted(true);
+              return;
+            }
+            
             const joined = await joinWaitingRoom(params.appointmentId);
             if (!joined && error) {
               console.error("Failed to join waiting room:", error);
@@ -240,181 +295,125 @@ export default function VideoPage({ params }: VideoPageProps) {
                 // Let the error effect handler deal with this
                 return;
               }
+              toast.error("Failed to join waiting room. Please try again.");
+              setIsCallActive(false);
+              setIsWaiting(false);
+              router.push(`/appointments/${params.appointmentId}`);
+              return;
             }
             setIsWaiting(true);
-          }
-        } else {
-          console.log("Found existing session:", 
-            {
-              sessionId: existingSession.sessionId,
-              status: existingSession.status,
-              webrtcConfig: existingSession.webrtcConfig ? {
-                role: existingSession.webrtcConfig.role,
-                waitingRoomEnabled: existingSession.webrtcConfig.waitingRoomEnabled
-              } : null
-            }
-          );
-          
-          // Check if a proper video session was returned with webrtcConfig
-          if (existingSession.webrtcConfig) {
-            // Initialize WebRTC with the provided configuration
-            console.log("Session has WebRTC config, setting up connection...");
             
-            // If doctor, check for patients in waiting room
-            if (isDoctor) {
-              // Fetch waiting room patients
-              console.log("Doctor view: Checking for patients in the waiting room");
-              
-              // Make sure we have appointment and patient details
-              if (appointment && appointment.patientId) {
-                // Log the exact patient details we're adding to waiting room
-                console.log("Setting up waiting room with patient:", {
-                  patientId: appointment.patientId,
-                  firstName: appointment.patientDetails?.firstName || 'Unknown',
-                  lastName: appointment.patientDetails?.lastName || 'Patient'
-                });
-                
-                setWaitingPatients([
-                  {
-                    userId: appointment.patientId, // Make sure this is the correct patient ID
-                    firstName: appointment.patientDetails?.firstName || 'Patient',
-                    lastName: appointment.patientDetails?.lastName || '',
-                    waitingSince: Date.now() - 30000 // 30 seconds ago for demo
-                  }
-                ]);
-              } else {
-                console.warn("No patient ID found in appointment data");
-              }
-            } else {
-              // If patient, check if they've been admitted already
-              if (existingSession.webrtcConfig.role === 'patient' && 
-                  !existingSession.webrtcConfig.waitingRoomEnabled) {
-                console.log("Patient has been admitted, joining call immediately");
-                setIsCallActive(true);
-              } else {
-                // Check if patient has stored ready state
-                const storedReady = localStorage.getItem('patientReady');
-                if (storedReady) {
-                  try {
-                    const readyData = JSON.parse(storedReady);
-                    const isCurrentAppointment = readyData.appointmentTime === appointment.startTime;
-                    const isRecent = Date.now() - readyData.timestamp < 3600000; // 1 hour
-                    
-                    if (isCurrentAppointment && isRecent) {
-                      // If patient was previously ready, show waiting room
-                      console.log("Patient was previously ready, rejoining waiting room");
-                      setIsWaiting(true);
-                    }
-                  } catch (e) {
-                    // Invalid data, ignore
-                    localStorage.removeItem('patientReady');
-                  }
-                } else {
-                  // If patient, join waiting room
-                  console.log("Patient joining waiting room...");
-                  setIsWaiting(true);
-                }
-              }
-            }
-          } else {
-            console.warn("Session exists but has no WebRTC config");
+            // Start polling for admission status
+            console.log("Patient added to waiting room, polling for admission status");
           }
         }
-      } catch (error) {
-        console.error("Failed to initialize session:", error);
+      } catch (err) {
+        console.error("Error initializing video session:", err);
+        toast.error("There was an error setting up the video call. Please try again.");
+        setIsCallActive(false);
+        setIsWaiting(false);
       }
     };
-
-    if (appointment && user && !sessionInitialized.current) {
-      initSession();
-    }
-  }, [appointment, user, params.appointmentId, getVideoSession, createVideoSession, joinWaitingRoom, isDoctor, error]);
+    
+    initSession();
+  }, [params.appointmentId, appointment, isDoctor, user, createVideoSession, getVideoSession, joinWaitingRoom, error, router]);
   
-  // Setup polling for patient to check admission status with better error handling
+  // Modify the useEffect that checks for admission status to handle rate limiting
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
     let errorCount = 0;
     const maxErrors = 3;
-    const pollInterval = 3000; // Reduce to 3 seconds for faster detection
+    const pollInterval = 3000; // 3 seconds for faster detection
+    const maxChecksPerWindow = 3;
+    const checkWindow = 30000; // 30 seconds window
     
     const checkAdmissionStatus = async () => {
-      if (!isWaiting || isCallActive || isDoctor) return;
+      if (!isWaiting || patientAdmitted) return;
+      
+      // Check rate limiting
+      const currentTime = Date.now();
+      if (currentTime - lastCheckTimeRef.current < checkWindow) {
+        // We're within the check window
+        if (checkCountRef.current >= maxChecksPerWindow) {
+          console.log(`[checkAdmissionStatus] Rate limit reached (${maxChecksPerWindow} checks in ${checkWindow/1000} seconds). Waiting...`);
+          // Don't attempt the check, but allow the polling to continue
+          return;
+        }
+      } else {
+        // We're outside the window, reset counter
+        checkCountRef.current = 0;
+        lastCheckTimeRef.current = currentTime;
+      }
+      
+      // Increment the check counter
+      checkCountRef.current++;
       
       try {
-        console.log(`[checkAdmissionStatus] Patient (${user?.userId}) checking admission status for appointment ${params.appointmentId}`);
-        const currentSession = await getVideoSession(params.appointmentId);
+        // Get the latest session state
+        const session = await getVideoSession(params.appointmentId);
         
-        // Debug log the session details
-        if (currentSession) {
-          console.log(`[checkAdmissionStatus] Got session:`, {
-            sessionId: currentSession.sessionId,
-            hasWebRTCConfig: !!currentSession.webrtcConfig,
-            role: currentSession.webrtcConfig?.role,
-            waitingRoomEnabled: currentSession.webrtcConfig?.waitingRoomEnabled,
-            updated: currentSession.updatedAt || 'No update time'
-          });
-        } else {
-          console.log(`[checkAdmissionStatus] No session returned`);
+        if (!session) {
+          console.log('No session found during admission check');
+          errorCount++;
+          
+          if (errorCount >= maxErrors) {
+            console.warn(`Too many errors checking admission status (${errorCount}), stopping polling`);
+            setIsWaiting(false);
+            toast.error("Failed to check admission status. Please try again later.");
+            router.push(`/appointments/${params.appointmentId}`);
+          }
+          
+          return;
         }
         
-        // Reset error count on successful request
+        // Reset error count when we successfully fetch a session
         errorCount = 0;
         
-        // Check if patient has been admitted (waitingRoomEnabled is false)
-        const isAdmitted = currentSession && 
-          currentSession.webrtcConfig && 
-          currentSession.webrtcConfig.role === 'patient' && 
-          !currentSession.webrtcConfig.waitingRoomEnabled;
+        console.log(`Checking admission status for patient: ${user?.userId}`, {
+          waitingRoomEnabled: session.webrtcConfig?.waitingRoomEnabled,
+          participants: session.participants || []
+        });
         
-        if (isAdmitted) {
-          console.log("[checkAdmissionStatus] Patient has been admitted to the call!");
-          
-          // Save admission state to local storage
-          localStorage.setItem('patientAdmitted', JSON.stringify({
-            appointmentId: params.appointmentId,
-            timestamp: Date.now()
-          }));
-          
-          // Update UI state immediately
-          setIsWaiting(false);
-          setIsCallActive(true);
+        // First check if waiting room is disabled (patient has been admitted)
+        if (session.webrtcConfig && session.webrtcConfig.waitingRoomEnabled === false) {
+          console.log('Patient has been admitted (waiting room disabled)!');
           setPatientAdmitted(true);
           
-          // Show a toast notification
-          toast.success("Doctor has admitted you to the call");
+          // Show the admission animation briefly before changing to call view
+          setTimeout(() => {
+            setIsWaiting(false);
+            setIsCallActive(true);
+          }, 1000);
           
-          // Clear interval since we're now admitted
-          if (intervalId) {
-            clearInterval(intervalId);
-          }
-        } else {
-          console.log("[checkAdmissionStatus] Patient still waiting for admission");
+          return;
+        }
+        
+        // Then check participant status if available
+        if (session.participants && Array.isArray(session.participants)) {
+          const isAdmitted = session.participants.some(
+            (p: SessionParticipant) => p.userId === user?.userId && p.status === 'active'
+          );
           
-          // If session exists but doesn't show admission yet, check again sooner
-          // This helps detect quick changes in session state
-          if (currentSession && intervalId) {
-            clearInterval(intervalId);
-            intervalId = setInterval(checkAdmissionStatus, pollInterval);
+          if (isAdmitted) {
+            console.log('Patient has been admitted to the call based on participant status!');
+            setPatientAdmitted(true);
+            
+            // Show the admission animation briefly before changing to call view
+            setTimeout(() => {
+              setIsWaiting(false);
+              setIsCallActive(true);
+            }, 1000);
           }
         }
       } catch (err) {
+        console.error('Error checking admission status:', err);
         errorCount++;
-        console.error(`[checkAdmissionStatus] Error checking admission status (${errorCount}/${maxErrors}):`, err);
         
-        // If we've reached the max errors, stop polling
         if (errorCount >= maxErrors) {
-          console.error("[checkAdmissionStatus] Too many errors, stopping admission status checks");
-          clearInterval(intervalId);
-          
-          // Show reconnect option to user
-          toast.error(
-            "Connection lost. Please refresh the page to reconnect.", 
-            { 
-              autoClose: false,
-              closeOnClick: false,
-              draggable: false
-            }
-          );
+          console.warn(`Too many errors checking admission status (${errorCount}), stopping polling`);
+          setIsWaiting(false);
+          toast.error("Failed to check admission status. Please try again later.");
+          router.push(`/appointments/${params.appointmentId}`);
         }
       }
     };
@@ -433,14 +432,41 @@ export default function VideoPage({ params }: VideoPageProps) {
         clearInterval(intervalId);
       }
     };
-  }, [isWaiting, isCallActive, isDoctor, params.appointmentId, getVideoSession, user?.userId]);
+  }, [isWaiting, isDoctor, params.appointmentId, getVideoSession, user?.userId, router, patientAdmitted]);
   
+  // Update the handleReadyForCall function to handle rate limiting
   const handleReadyForCall = async () => {
     try {
       console.log("Patient is ready for call, joining waiting room...");
       
+      // Prevent multiple rapid clicks
+      if (hasClickedReadyRef.current) {
+        console.log("Already clicked ready, ignoring repeated click");
+        return;
+      }
+      
+      hasClickedReadyRef.current = true;
+      setTimeout(() => {
+        hasClickedReadyRef.current = false;
+      }, 3000); // Prevent re-clicks for 3 seconds
+      
+      // First check if the session exists
+      const existingSession = await getVideoSession(params.appointmentId);
+      
+      if (!existingSession) {
+        console.log("No session exists yet, can't join waiting room");
+        toast.info("The doctor hasn't started the call yet. Please try again later.");
+        return;
+      }
+      
       // Join waiting room through API
-      await joinWaitingRoom(params.appointmentId);
+      const waitingRoomResult = await joinWaitingRoom(params.appointmentId);
+      
+      if (!waitingRoomResult) {
+        console.error("Failed to join waiting room");
+        toast.error("Failed to join waiting room. Please try again.");
+        return;
+      }
       
       // Begin polling for admission
       setIsWaiting(true);
@@ -449,11 +475,79 @@ export default function VideoPage({ params }: VideoPageProps) {
       setPatientAdmitted(false);
       
       console.log("Patient joined waiting room successfully");
+      toast.success("You've joined the waiting room. Please wait for the doctor to admit you.");
     } catch (error) {
       console.error("Failed to join waiting room:", error);
+      toast.error("An error occurred while joining the waiting room. Please try again.");
+    } finally {
+      // Reset the click state in case of errors
+      setTimeout(() => {
+        hasClickedReadyRef.current = false;
+      }, 1000);
     }
   };
   
+  // Update the doctor's session to poll for waiting patients
+  useEffect(() => {
+    // Only run this for doctors and when call is not active yet
+    if (!isDoctor || isCallActive || !appointment) return;
+    
+    const checkWaitingPatients = async () => {
+      try {
+        console.log(`[checkWaitingPatients] Checking for waiting patients for appointment ${params.appointmentId}`);
+        
+        // Get the latest session state
+        const session = await getVideoSession(params.appointmentId);
+        
+        if (!session) {
+          console.log('[checkWaitingPatients] No session found');
+          return;
+        }
+        
+        // Check if we have waitingRoomStatus in the session
+        if (session.waitingRoomStatus) {
+          console.log('[checkWaitingPatients] Found waiting room status:', session.waitingRoomStatus);
+          
+          // Convert waiting room status to array of patients
+          const patientIds = Object.keys(session.waitingRoomStatus);
+          
+          if (patientIds.length > 0) {
+            console.log(`[checkWaitingPatients] Found ${patientIds.length} waiting patients`);
+            
+            // Format the patients for the waiting room component
+            const formattedPatients = patientIds.map(patientId => {
+              const patientStatus = session.waitingRoomStatus[patientId];
+              return {
+                userId: patientId,
+                firstName: appointment.patientDetails?.firstName || 'Patient',
+                lastName: appointment.patientDetails?.lastName || '',
+                waitingSince: new Date(patientStatus.joinedAt).getTime()
+              };
+            });
+            
+            // Update waiting patients state
+            setWaitingPatients(formattedPatients);
+          }
+        } else {
+          console.log('[checkWaitingPatients] No waiting room status found in session');
+        }
+      } catch (err) {
+        console.error('[checkWaitingPatients] Error checking for waiting patients:', err);
+      }
+    };
+    
+    // Call immediately
+    checkWaitingPatients();
+    
+    // Then poll every 5 seconds
+    const interval = setInterval(checkWaitingPatients, 5000);
+    
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isDoctor, isCallActive, appointment, params.appointmentId, getVideoSession]);
+  
+  // Also modify the handleAdmitPatient function to handle case when waitingPatients is empty
   const handleAdmitPatient = async (patientId: string) => {
     try {
       console.log(`[handleAdmitPatient] Doctor (${user?.userId}) admitting patient (${patientId})`);
@@ -461,6 +555,9 @@ export default function VideoPage({ params }: VideoPageProps) {
       
       // Show admission in progress
       toast.info("Admitting patient to the call...");
+      
+      // Dismiss the waiting notification toast if it exists
+      toast.dismiss("patient-waiting-notification");
       
       // Refresh appointment data to ensure we have the latest
       await fetchAppointmentById(params.appointmentId);
@@ -472,21 +569,28 @@ export default function VideoPage({ params }: VideoPageProps) {
         return;
       }
       
-      console.log(`[handleAdmitPatient] Loaded appointment data:`, {
-        appointmentId: appointment.appointmentId,
-        patientId: appointment.patientId,
-        doctorId: appointment.doctorId,
-        waitingPatientIds: waitingPatients.map(p => p.userId)
-      });
-      
-      // Always use the patientId from the appointment data
-      // This ensures we're using the correct ID regardless of what's in the waiting room UI
-      const correctPatientId = appointment.patientId;
-      
-      if (correctPatientId !== patientId) {
-        console.warn(`[handleAdmitPatient] Patient ID mismatch! Appointment patient: ${correctPatientId}, Waiting room patient: ${patientId}`);
-        patientId = correctPatientId;
-        console.log(`[handleAdmitPatient] Using appointment's patient ID instead: ${patientId}`);
+      // If waitingPatients is empty but we have appointment data,
+      // use the patient ID from the appointment
+      if (waitingPatients.length === 0) {
+        console.log(`[handleAdmitPatient] No waiting patients in list, using appointment's patient ID: ${appointment.patientId}`);
+        patientId = appointment.patientId;
+      } else {
+        console.log(`[handleAdmitPatient] Loaded appointment data:`, {
+          appointmentId: appointment.appointmentId,
+          patientId: appointment.patientId,
+          doctorId: appointment.doctorId,
+          waitingPatientIds: waitingPatients.map(p => p.userId)
+        });
+        
+        // Always use the patientId from the appointment data
+        // This ensures we're using the correct ID regardless of what's in the waiting room UI
+        const correctPatientId = appointment.patientId;
+        
+        if (correctPatientId !== patientId) {
+          console.warn(`[handleAdmitPatient] Patient ID mismatch! Appointment patient: ${correctPatientId}, Waiting room patient: ${patientId}`);
+          patientId = correctPatientId;
+          console.log(`[handleAdmitPatient] Using appointment's patient ID instead: ${patientId}`);
+        }
       }
 
       console.log(`[handleAdmitPatient] Making API call to admit patient ${patientId} for appointment ${params.appointmentId}`);
@@ -635,6 +739,40 @@ export default function VideoPage({ params }: VideoPageProps) {
     
     router.push(`/appointments/${params.appointmentId}`);
   };
+  
+  // Add a prominent notification when patients are waiting
+  useEffect(() => {
+    // Only show for doctors and when there are waiting patients
+    if (isDoctor && waitingPatients.length > 0) {
+      // Show a prominent sticky notification at the top of the screen
+      toast.info(
+        <div className="flex items-center">
+          <div className="mr-3 bg-red-100 p-2 rounded-full">
+            <div className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </div>
+          </div>
+          <div>
+            <p className="font-bold">Patient Waiting to Join!</p>
+            <p className="text-sm">
+              {waitingPatients[0]?.firstName} {waitingPatients[0]?.lastName} is waiting to join your call
+            </p>
+          </div>
+        </div>, 
+        {
+          position: "top-right",
+          autoClose: false,
+          hideProgressBar: false,
+          closeOnClick: false,
+          pauseOnHover: true,
+          draggable: true,
+          progress: undefined,
+          toastId: "patient-waiting-notification" // Prevent duplicate toasts
+        }
+      );
+    }
+  }, [isDoctor, waitingPatients]);
   
   // If still loading and no appointment, show loading indicator
   if (loading && !appointment) {
