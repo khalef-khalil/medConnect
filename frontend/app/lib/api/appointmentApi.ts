@@ -64,4 +64,26 @@ export const getDoctorAvailability = async (
   const api = createAxiosInstance(token);
   const response = await api.get(`/appointments/doctor/${doctorId}/availability?startDate=${startDate}&endDate=${endDate}`);
   return response.data;
+};
+
+// Get doctor appointments by date range
+export const getDoctorAppointments = async (
+  token: string,
+  doctorId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<{ appointments: Appointment[] }> => {
+  const api = createAxiosInstance(token);
+  let url = `/appointments?doctorId=${doctorId}`;
+  
+  if (startDate) {
+    url += `&startDate=${startDate}`;
+  }
+  
+  if (endDate) {
+    url += `&endDate=${endDate}`;
+  }
+  
+  const response = await api.get(url);
+  return response.data;
 }; 

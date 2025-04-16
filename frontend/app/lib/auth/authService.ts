@@ -99,10 +99,10 @@ export const authService = {
       const imageResponse = await authApi.post<User>('/users/profile/image', {
         imageBase64: data.profileImage
       });
-      return imageResponse.data.user || imageResponse.data;
+      return imageResponse.data;
     }
     
-    return profileResponse.data.user || profileResponse.data;
+    return profileResponse.data;
   },
   
   // Helper method to set auth token in headers

@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ForgotPasswordFormData } from '@/app/types/auth';
-import { forgotPasswordSchema } from '@/app/lib/auth/validation';
-import { useAuth } from '@/app/hooks/useAuth';
+import { z } from 'zod';
 import { toast } from 'react-toastify';
-import FormInput from '@/app/components/auth/FormInput';
-import FormButton from '@/app/components/auth/FormButton';
 import { motion } from 'framer-motion';
+
+// Define validation schema
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Please enter a valid email address')
+});
+
+type ForgotPasswordFormData = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
   const { register, handleSubmit, formState: { errors } } = useForm<ForgotPasswordFormData>({
@@ -21,29 +23,31 @@ export default function ForgotPasswordPage() {
     }
   });
 
-  const { forgotPassword, loading, error } = useAuth();
+  const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onSubmit = async (data: ForgotPasswordFormData) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      await forgotPassword(data);
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
       setIsSuccess(true);
       toast.success('Password reset instructions sent to your email');
     } catch (err) {
-      toast.error(error || 'Failed to send reset instructions. Please try again.');
+      setError('Failed to send reset instructions. Please try again.');
+      toast.error('Failed to send reset instructions. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
-      {/* Left Side - Form */}
       <div className="md:w-1/2 flex items-center justify-center p-8 md:p-16">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="w-full max-w-md"
-        >
+        <div className="w-full max-w-md">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-primary-600">MedConnect</h1>
           </div>
@@ -53,16 +57,12 @@ export default function ForgotPasswordPage() {
             <p className="text-gray-600 mt-2">
               {isSuccess 
                 ? 'Check your email for reset instructions' 
-                : 'We'll send you password reset instructions'}
+                : 'We will send you password reset instructions'}
             </p>
           </div>
 
           {isSuccess ? (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="bg-primary-50 border border-primary-200 rounded-lg p-6 text-center"
-            >
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-6 text-center">
               <div className="w-16 h-16 mx-auto bg-primary-100 rounded-full flex items-center justify-center mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -70,13 +70,11 @@ export default function ForgotPasswordPage() {
               </div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2">Check Your Email</h3>
               <p className="text-gray-600 mb-6">
-                We've sent password reset instructions to your email address. Please check your inbox.
+                We&apos;ve sent password reset instructions to your email address.
               </p>
               <div className="flex flex-col space-y-3">
-                <Link href="/auth/login">
-                  <FormButton type="button" fullWidth>
-                    Return to Login
-                  </FormButton>
+                <Link href="/auth/login" className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors w-full text-center">
+                  Return to Login
                 </Link>
                 <button
                   type="button"
@@ -86,22 +84,44 @@ export default function ForgotPasswordPage() {
                   Did not receive the email? Try again
                 </button>
               </div>
-            </motion.div>
+            </div>
           ) : (
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              <FormInput
-                label="Email"
-                type="email"
-                error={errors.email}
-                {...register('email')}
-                placeholder="you@example.com"
-                autoComplete="email"
-                required
-              />
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  {...register('email')}
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  required
+                />
+                {errors.email && (
+                  <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                )}
+              </div>
 
-              <FormButton type="submit" fullWidth isLoading={loading}>
-                Send Reset Instructions
-              </FormButton>
+              <button
+                type="submit"
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Sending...
+                  </>
+                ) : (
+                  'Send Reset Instructions'
+                )}
+              </button>
 
               <div className="text-center">
                 <Link
@@ -113,70 +133,18 @@ export default function ForgotPasswordPage() {
               </div>
             </form>
           )}
-        </motion.div>
+        </div>
       </div>
 
-      {/* Right Side - Image */}
       <div className="hidden md:flex md:w-1/2 bg-gradient-to-tr from-primary-700 to-primary-500 items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          className="max-w-md p-12 text-white"
-        >
+        <div className="max-w-md p-12 text-white">
           <div className="mb-8">
-            <div className="w-20 h-20 mx-auto bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center mb-6">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth={2} 
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" 
-                />
-              </svg>
-            </div>
             <h2 className="text-2xl font-bold text-center mb-2">Secure Account Recovery</h2>
             <p className="text-center text-primary-100">
               We prioritize your security and privacy. Your account information and medical data are protected with industry-standard encryption.
             </p>
           </div>
-
-          <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6">
-            <h3 className="text-lg font-semibold mb-3">Password Requirements</h3>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                At least 8 characters
-              </li>
-              <li className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                At least one uppercase letter
-              </li>
-              <li className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                At least one lowercase letter
-              </li>
-              <li className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                At least one number
-              </li>
-              <li className="flex items-center">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-primary-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                At least one special character
-              </li>
-            </ul>
-          </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );

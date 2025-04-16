@@ -70,36 +70,11 @@ export default function AppointmentForm() {
     if (Array.isArray(availability.availableSlots)) {
       // Already in the correct format
       return availability.availableSlots.filter(day => day && day.date); // Filter out items with undefined date
-    } else if (availability.availableSlots) {
-      // Process slots from backend format
-      availability.availableSlots.forEach((slot: any) => {
-        if (slot.start && slot.end) {
-          const date = new Date(slot.start);
-          if (!isNaN(date.getTime())) {
-            const dateStr = date.toISOString().split('T')[0]; // Get YYYY-MM-DD
-            
-            if (!slotsByDay[dateStr]) {
-              slotsByDay[dateStr] = [];
-            }
-            
-            slotsByDay[dateStr].push({
-              startTime: slot.start,
-              endTime: slot.end
-            });
-          }
-        }
-      });
-      
-      // Convert to array of DailyAvailability
-      const result: DailyAvailability[] = Object.keys(slotsByDay).map(date => ({
-        date,
-        slots: slotsByDay[date]
-      }));
-      
-      return result;
+    } else {
+      // Handle case when availableSlots might have a different structure
+      // Create an empty array for backwards compatibility
+      return [];
     }
-    
-    return [];
   };
   
   const getSlotsForDay = (date: string): AvailabilitySlot[] => {

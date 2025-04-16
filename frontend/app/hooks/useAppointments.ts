@@ -7,7 +7,8 @@ import {
   createAppointment, 
   updateAppointment, 
   deleteAppointment,
-  getDoctorAvailability
+  getDoctorAvailability,
+  getDoctorAppointments
 } from '../lib/api/appointmentApi';
 import { 
   Appointment, 
@@ -142,6 +143,25 @@ export function useAppointments() {
     }
   }, [token]);
 
+  // Fetch doctor's appointments by date range
+  const fetchDoctorAppointments = useCallback(async (doctorId: string, startDate?: string, endDate?: string) => {
+    if (!token) return null;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const data = await getDoctorAppointments(token, doctorId, startDate, endDate);
+      return data;
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to fetch doctor appointments');
+      console.error('Error fetching doctor appointments:', err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
   return {
     appointments,
     appointment,
@@ -153,6 +173,7 @@ export function useAppointments() {
     createNewAppointment,
     updateExistingAppointment,
     removeAppointment,
-    fetchDoctorAvailability
+    fetchDoctorAvailability,
+    fetchDoctorAppointments
   };
 } 
