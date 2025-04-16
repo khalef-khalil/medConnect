@@ -293,6 +293,15 @@ exports.admitFromWaitingRoom = async (req, res) => {
     const webrtcData = appointment.webrtcData;
     webrtcData.participants.patient.token = admitData.token;
     
+    // IMPORTANT: Set waitingRoomEnabled to false when patient is admitted
+    webrtcData.waitingRoomEnabled = false;
+    
+    // Add updated timestamp for detection by clients
+    webrtcData.updatedAt = new Date().toISOString();
+    
+    // Log the update for debugging
+    logger.info(`Admitting patient ${patientId} to video session - setting waitingRoomEnabled=false for appointment ${appointmentId}`);
+    
     // Update appointment
     const updateParams = {
       TableName: TABLES.APPOINTMENTS,

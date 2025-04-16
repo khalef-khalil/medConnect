@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { Doctor } from '../../types/appointment';
+import { getApiUrl } from '../networkUtils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+// Get the API URL dynamically
+const API_URL = getApiUrl();
 
 // Create axios instance with authorization header
 const createAxiosInstance = (token: string) => {

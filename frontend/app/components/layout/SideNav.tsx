@@ -140,7 +140,7 @@ export default function SideNav() {
 
   return (
     <motion.div 
-      className="bg-white border-r border-gray-200 h-full z-10 shadow-sm"
+      className="bg-white border-r border-gray-200 h-full z-30 shadow-sm"
       initial={{ width: expanded ? 240 : 72 }}
       animate={{ width: expanded ? 240 : 72 }}
       transition={{ type: 'spring', stiffness: 500, damping: 30 }}

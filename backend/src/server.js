@@ -4,15 +4,28 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { logger } = require('./utils/logger');
 const { initializeResources } = require('./utils/init');
+const { getPrimaryLocalIpAddress, logNetworkInterfaces } = require('./utils/network');
 const routes = require('./routes');
 
 // Initialize express app
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// CORS configuration 
+const corsOptions = {
+  origin: true, // Allow all origins
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-access-token'],
+  credentials: true,
+  maxAge: 86400 // 24 hours
+};
+
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
+
+// Add preflight handler for complex requests
+app.options('*', cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '50mb' }));
@@ -49,6 +62,11 @@ app.get(`${apiPrefix}/health`, (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   logger.error(err.stack);
+  
+  // Add CORS headers to error responses
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
   res.status(err.statusCode || 500).json({
     message: err.message || 'Internal Server Error',
     stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -61,9 +79,24 @@ app.use((err, req, res, next) => {
     // Initialize AWS resources
     await initializeResources();
     
+    // Get the primary local IP address
+    const localIp = getPrimaryLocalIpAddress();
+    
     // Start server
-    app.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+    const HOST = process.env.HOST || '0.0.0.0';
+    app.listen(PORT, HOST, () => {
+      logger.info(`Server running on http://${HOST}:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+      logger.info(`CORS enabled for ALL origins (development mode)`);
+      
+      // Log all available network interfaces for easy connection
+      logNetworkInterfaces();
+      
+      // Log connection URLs
+      logger.info('--------------------------------------');
+      logger.info('The server is accessible at:');
+      logger.info(`- Local:   http://localhost:${PORT}`);
+      logger.info(`- Network: http://${localIp}:${PORT}`);
+      logger.info('--------------------------------------');
     });
   } catch (error) {
     logger.error('Failed to start server:', error);

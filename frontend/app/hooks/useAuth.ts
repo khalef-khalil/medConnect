@@ -1,19 +1,112 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import { useAuthStore } from '../store/authStore';
 import { LoginFormData, RegisterFormData, UpdateProfileFormData, User } from '../types/auth';
+import axios from 'axios';
+import { getApiUrl } from '../lib/networkUtils';
 
-// In a real app, this would be connected to an actual API
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+// Configure API URL to work across local network
+const API_URL = getApiUrl();
+
+console.log(`[useAuth] Using API URL: ${API_URL}`);
+
+// Track refresh token attempts to prevent infinite loops
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+// Function to add new subscribers that will be resolved when token is refreshed
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+// Function to notify all subscribers about the new token
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach(cb => cb(token));
+  refreshSubscribers = [];
+};
 
 export function useAuth() {
   const router = useRouter();
   const { setAuth, clearAuth, updateUser, token } = useAuthStore();
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Setup axios interceptors for token refresh
+  useEffect(() => {
+    // Setup a request interceptor to add the token to all requests
+    const requestInterceptor = axios.interceptors.request.use(
+      config => {
+        if (token && config.headers) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      error => Promise.reject(error)
+    );
+
+    // Return a cleanup function
+    return () => {
+      axios.interceptors.request.eject(requestInterceptor);
+    };
+  }, [token]);
+
+  // Refresh token function
+  const refreshToken = useCallback(async (): Promise<string | null> => {
+    if (isRefreshing) {
+      // Return a promise that resolves when the token is refreshed
+      return new Promise(resolve => {
+        subscribeTokenRefresh(token => {
+          resolve(token);
+        });
+      });
+    }
+
+    isRefreshing = true;
+    
+    try {
+      // In a real implementation, you would call a refresh token endpoint
+      // For now, we'll just simulate a token refresh with the current token
+      const response = await fetch(`${API_URL}/users/refresh-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        // If refresh fails, clear auth and redirect to login
+        clearAuth();
+        router.push('/auth/login');
+        return null;
+      }
+      
+      const data = await response.json();
+      const newToken = data.token;
+      
+      // Update auth with new token
+      if (data.user) {
+        setAuth(newToken, data.user);
+      }
+      
+      // Notify all subscribers about the new token
+      onTokenRefreshed(newToken);
+      
+      return newToken;
+    } catch (err) {
+      console.error('Failed to refresh token:', err);
+      
+      // If refresh fails, clear auth
+      clearAuth();
+      
+      return null;
+    } finally {
+      isRefreshing = false;
+    }
+  }, [token, clearAuth, router, setAuth]);
 
   // Login function
   const login = useCallback(async (data: LoginFormData) => {
@@ -205,6 +298,7 @@ export function useAuth() {
     logout,
     getProfile,
     updateProfile,
+    refreshToken,
     loading,
     error,
   };

@@ -1,0 +1,24 @@
+{
+  "name": "medconnect",
+  "version": "1.0.0",
+  "description": "MedConnect Telemedicine Platform",
+  "scripts": {
+    "start:frontend": "cd frontend && npm run dev:network",
+    "start:backend": "cd backend && npm run start",
+    "start": "concurrently --names \"BACKEND,FRONTEND\" --prefix-colors \"blue,green\" \"npm run start:backend\" \"npm run start:frontend\"",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "telemedicine",
+    "healthcare",
+    "react",
+    "nextjs",
+    "node"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "concurrently": "^8.2.0"
+  }
+} 

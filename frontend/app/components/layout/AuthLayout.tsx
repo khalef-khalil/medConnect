@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../store/authStore';
 import SideNav from './SideNav';
 import TopNav from './TopNav';
+import MobileNav from './MobileNav';
 
 interface AuthLayoutProps {
   children: ReactNode;
+  fullWidth?: boolean;
 }
 
-export default function AuthLayout({ children }: AuthLayoutProps) {
+export default function AuthLayout({ children, fullWidth = false }: AuthLayoutProps) {
   const { isAuthenticated, hydrated } = useAuthStore();
   const router = useRouter();
 
@@ -37,12 +39,21 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <SideNav />
+      {/* SideNav is hidden on mobile */}
+      <div className="hidden md:block">
+        {!fullWidth && <SideNav />}
+      </div>
+      
       <div className="flex-1 overflow-auto">
-        <TopNav />
-        <main className="pt-16">
+        {!fullWidth && <TopNav />}
+        
+        {/* Main content with padding at the bottom for mobile nav */}
+        <main className={`${fullWidth ? "" : "pt-14 md:pt-16"} pb-16 md:pb-0`}>
           {children}
         </main>
+        
+        {/* Mobile Navigation (hidden on desktop) */}
+        {!fullWidth && <MobileNav />}
       </div>
     </div>
   );

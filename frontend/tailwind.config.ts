@@ -44,6 +44,9 @@ const config: Config = {
       boxShadow: {
         'card': '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
       },
+      height: {
+        'safe-bottom': 'env(safe-area-inset-bottom, 0px)'
+      }
     },
   },
   plugins: [],
