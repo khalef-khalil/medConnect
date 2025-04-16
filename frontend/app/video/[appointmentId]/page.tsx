@@ -86,6 +86,7 @@ export default function VideoPage({ params }: VideoPageProps) {
           // Check if navigator.mediaDevices is available
           if (!navigator.mediaDevices) {
             console.error('MediaDevices API not available in this browser or context');
+            toast.error('Camera access not available. Make sure you are using a modern browser with HTTPS');
             // Fallback for when media devices aren't available - create a placeholder participant
             if (user) {
               setParticipants(prev => [
@@ -103,28 +104,63 @@ export default function VideoPage({ params }: VideoPageProps) {
             return;
           }
           
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true
-          });
-          
-          setLocalStream(stream);
-          
-          // Add self as participant
-          if (user) {
-            setParticipants(prev => [
-              ...prev,
-              {
-                userId: user.userId,
-                name: `${user.firstName} ${user.lastName}`,
-                stream,
-                isMuted: false,
-                isCameraOff: false,
-                isSpeaking: false
-              }
-            ]);
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true
+            });
+            
+            setLocalStream(stream);
+            
+            // Add self as participant
+            if (user) {
+              setParticipants(prev => [
+                ...prev,
+                {
+                  userId: user.userId,
+                  name: `${user.firstName} ${user.lastName}`,
+                  stream,
+                  isMuted: false,
+                  isCameraOff: false,
+                  isSpeaking: false
+                }
+              ]);
+            }
+          } catch (error: any) {
+            console.error('Error accessing media devices:', error);
+            
+            // Provide more specific error messages based on the error
+            if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+              toast.error('Camera or microphone access denied. Please allow access in your browser settings.');
+            } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+              toast.error('No camera or microphone found. Please connect a device and try again.');
+            } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+              toast.error('Your camera or microphone is already in use by another application.');
+            } else if (error.name === 'OverconstrainedError') {
+              toast.error('Unable to find media devices that meet the required constraints.');
+            } else if (error.name === 'TypeError' || (error.message && error.message.includes('HTTPS'))) {
+              toast.error('Camera access requires HTTPS. Please use a secure connection.');
+            } else {
+              toast.error('Error accessing your camera and microphone. Please check your browser settings.');
+            }
+            
+            // Still create a participant with camera off
+            if (user) {
+              setParticipants(prev => [
+                ...prev,
+                {
+                  userId: user.userId,
+                  name: `${user.firstName} ${user.lastName}`,
+                  stream: null,
+                  isMuted: false,
+                  isCameraOff: true,
+                  isSpeaking: false
+                }
+              ]);
+            }
           }
           
+          // The rest of your code for adding other participants remains the same
           // If both participants aren't already in the call list, add the other participant
           if (appointment && participants.length < 2) {
             const otherParticipantId = isDoctor ? appointment.patientId : appointment.doctorId;
@@ -151,7 +187,8 @@ export default function VideoPage({ params }: VideoPageProps) {
             }
           }
         } catch (err) {
-          console.error('Error accessing media devices:', err);
+          console.error('Error in setupLocalStream:', err);
+          toast.error('An unexpected error occurred. Please refresh and try again.');
         }
       };
       

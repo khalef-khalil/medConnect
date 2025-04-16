@@ -36,7 +36,7 @@ router.use('/notifications', require('./notification.routes'));
 router.get('/doctors/:doctorId/availability', verifyToken, appointmentController.getDoctorAvailability);
 
 // Health check endpoint
-router.get('/../health', (req, res) => {
+router.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', environment: process.env.NODE_ENV || 'development' });
 });
 

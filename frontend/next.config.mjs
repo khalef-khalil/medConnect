@@ -1,4 +1,18 @@
 /** @type {import('next').NextConfig} */
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
+
+// Get the directory name
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+
+// Certificate paths
+const keyPath = join(__dirname, 'certs', 'localhost-key.pem');
+const certPath = join(__dirname, 'certs', 'localhost.pem');
+
+// Check if certificates exist
+const certsExist = existsSync(keyPath) && existsSync(certPath);
+
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
@@ -12,6 +26,16 @@ const nextConfig = {
         pathname: '/api/**',
       },
     ],
+  },
+  // Enable HTTPS for local development to allow camera/microphone access on local network
+  // This enables secure connections which Chrome requires for getUserMedia() on non-localhost
+  devServer: {
+    https: process.env.NODE_ENV === 'development' && process.env.HTTPS === 'true' ? 
+      certsExist ? {
+        key: keyPath,
+        cert: certPath,
+      } : true // Use Next.js auto-generated certs if our certs don't exist
+    : false,
   },
   // This configuration allows Next.js to be accessible on your local network
   async headers() {

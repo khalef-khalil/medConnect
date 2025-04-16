@@ -39,8 +39,27 @@ function getFallbackUrls(): string[] {
     return fallbackUrls;
   }
   
-  // Default fallbacks
-  fallbackUrls = ['http://localhost:3001', 'http://127.0.0.1:3001'];
+  // Default fallbacks including both HTTP and HTTPS
+  const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
+  
+  if (protocol === 'https:') {
+    // When frontend is HTTPS, prefer HTTPS fallbacks first
+    fallbackUrls = [
+      'https://localhost:3443', 
+      'https://127.0.0.1:3443',
+      'http://localhost:3001', 
+      'http://127.0.0.1:3001'
+    ];
+  } else {
+    // When frontend is HTTP, prefer HTTP fallbacks first
+    fallbackUrls = [
+      'http://localhost:3001', 
+      'http://127.0.0.1:3001',
+      'https://localhost:3443', 
+      'https://127.0.0.1:3443'
+    ];
+  }
+  
   return fallbackUrls;
 }
 
@@ -52,13 +71,28 @@ async function isUrlReachable(url: string): Promise<boolean> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000); // 2-second timeout
     
-    const response = await fetch(`${url}/api/v1/health`, { 
-      method: 'HEAD',
-      signal: controller.signal
-    });
+    // Try both health endpoints to ensure compatibility
+    const healthEndpoints = ['/api/v1/health', '/health'];
+    
+    for (const endpoint of healthEndpoints) {
+      try {
+        const response = await fetch(`${url}${endpoint}`, { 
+          method: 'HEAD',
+          signal: controller.signal
+        });
+        
+        if (response.ok) {
+          clearTimeout(timeoutId);
+          return true;
+        }
+      } catch (err) {
+        // Continue to the next endpoint
+        console.log(`Health check failed for ${url}${endpoint}`);
+      }
+    }
     
     clearTimeout(timeoutId);
-    return response.ok;
+    return false;
   } catch (err) {
     return false;
   }
@@ -125,12 +159,14 @@ export function getApiBaseUrl() {
         return currentApiBaseUrl;
       }
       
-      // Use current hostname with backend port
+      // Use the same protocol as the frontend (HTTPS or HTTP)
       const protocol = window.location.protocol;
       const hostname = window.location.hostname;
-      const port = process.env.NEXT_PUBLIC_API_PORT || '3001';
+      const port = protocol === 'https:' ? 
+                  (process.env.NEXT_PUBLIC_API_HTTPS_PORT || '3443') : 
+                  (process.env.NEXT_PUBLIC_API_PORT || '3001');
       
-      // Create the URL
+      // Create the URL with matching protocol
       const apiUrl = `${protocol}//${hostname}:${port}`;
       
       // Test connection in the background and update if needed
@@ -143,8 +179,9 @@ export function getApiBaseUrl() {
       return apiUrl;
     } catch (error) {
       console.error('Error generating API URL:', error);
-      // Fallback to localhost
-      currentApiBaseUrl = 'http://localhost:3001';
+      // Fallback to localhost with appropriate protocol
+      const protocol = typeof window !== 'undefined' ? window.location.protocol : 'http:';
+      currentApiBaseUrl = `${protocol}//localhost:${protocol === 'https:' ? '3443' : '3001'}`;
       return currentApiBaseUrl;
     }
   }

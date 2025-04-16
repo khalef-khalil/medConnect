@@ -5,10 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "dev:network": "node scripts/start-network.js",
+    "dev:https": "node scripts/generate-cert.js && node scripts/start-network.js",
     "build": "next build",
     "start": "next start",
     "start:network": "next start -H 0.0.0.0",
-    "lint": "next lint"
+    "lint": "next lint",
+    "generate-cert": "node scripts/generate-cert.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
