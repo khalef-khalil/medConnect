@@ -15,7 +15,7 @@ export const useSchedules = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
 
   const fetchDoctorSchedules = async (doctorId: string): Promise<IScheduleResponse | null> => {
     if (!token) {

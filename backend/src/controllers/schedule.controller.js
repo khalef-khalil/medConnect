@@ -252,8 +252,12 @@ exports.deleteSchedule = async (req, res) => {
     
     await dynamoDB.delete(deleteParams).promise();
     
+    // Send notification about the schedule deletion
+    await notifyScheduleUpdate(schedule.doctorId, schedule, 'deleted');
+    
     res.status(200).json({ 
-      message: 'Schedule deleted successfully'
+      message: 'Schedule deleted successfully',
+      scheduleId 
     });
   } catch (error) {
     logger.error('Error in deleteSchedule function:', error);

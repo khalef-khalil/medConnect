@@ -248,49 +248,49 @@ const notifyPayment = async (userId, payment, status) => {
 
 /**
  * Create notification for schedule changes
- * @param {string} doctorId - The ID of the doctor to notify
- * @param {Object} schedule - The schedule data
- * @param {string} action - The action performed (created, updated, deleted)
+ * @param {string} doctorId - Doctor ID to notify
+ * @param {Object} schedule - Schedule data
+ * @param {string} action - Action type (created, updated, deleted)
+ * @returns {Promise<Object>} - Created notification
  */
 const notifyScheduleUpdate = async (doctorId, schedule, action) => {
   try {
-    // Format the day of the week
-    const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const dayName = daysOfWeek[schedule.dayOfWeek];
-
-    // Format the message based on the action
-    let message = '';
-    let title = '';
+    let title, message;
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const day = dayNames[schedule.dayOfWeek];
     
     switch (action) {
       case 'created':
-        title = 'New Schedule Created';
-        message = `New schedule created for ${dayName}: ${schedule.startTime} to ${schedule.endTime}`;
+        title = 'Schedule Created';
+        message = `You have created a new schedule for ${day} from ${schedule.startTime} to ${schedule.endTime}`;
         break;
       case 'updated':
         title = 'Schedule Updated';
-        message = `Your schedule for ${dayName} was updated to ${schedule.startTime} to ${schedule.endTime}`;
+        message = `Your schedule for ${day} has been updated`;
         break;
       case 'deleted':
         title = 'Schedule Deleted';
-        message = `Your schedule for ${dayName} (${schedule.startTime} to ${schedule.endTime}) was deleted`;
+        message = `Your schedule for ${day} has been deleted`;
         break;
       default:
-        title = 'Schedule Changed';
-        message = `Schedule for ${dayName} was ${action}`;
+        title = 'Schedule Update';
+        message = `There's an update to your ${day} schedule`;
     }
-
-    // Use the existing notification system
+    
     return await createNotification(
       doctorId,
       title,
       message,
       'schedule',
-      { scheduleId: schedule.scheduleId }
+      { 
+        scheduleId: schedule.scheduleId,
+        dayOfWeek: schedule.dayOfWeek
+      }
     );
   } catch (error) {
     logger.error('Error creating schedule notification:', error);
-    throw error;
+    // Don't throw the error to prevent affecting the main flow
+    return null;
   }
 };
 

@@ -79,7 +79,33 @@ exports.getAppointmentById = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to view this appointment' });
     }
 
-    res.status(200).json({ appointment: result.Item });
+    // Fetch patient details
+    const patientParams = {
+      TableName: TABLES.USERS,
+      Key: { userId: appointment.patientId }
+    };
+    
+    const patientResult = await dynamoDB.get(patientParams).promise();
+    
+    if (patientResult.Item) {
+      const { userId, firstName, lastName, email, profileImage } = patientResult.Item;
+      appointment.patientDetails = { userId, firstName, lastName, email, profileImage };
+    }
+    
+    // Fetch doctor details
+    const doctorParams = {
+      TableName: TABLES.USERS,
+      Key: { userId: appointment.doctorId }
+    };
+    
+    const doctorResult = await dynamoDB.get(doctorParams).promise();
+    
+    if (doctorResult.Item) {
+      const { userId, firstName, lastName, email, profileImage, specialization } = doctorResult.Item;
+      appointment.doctorDetails = { userId, firstName, lastName, email, profileImage, specialization };
+    }
+
+    res.status(200).json(appointment);
   } catch (error) {
     logger.error('Error in getAppointmentById function:', error);
     res.status(500).json({ message: 'Server error' });
@@ -625,9 +651,32 @@ exports.getDoctorAvailability = async (req, res) => {
       currentDate.setHours(0, 0, 0, 0);
     }
 
+    // Group slots by date for the frontend
+    const slotsByDay = {};
+    
+    for (const slot of availableSlots) {
+      const date = new Date(slot.start);
+      const dateString = date.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      if (!slotsByDay[dateString]) {
+        slotsByDay[dateString] = [];
+      }
+      
+      slotsByDay[dateString].push({
+        startTime: slot.start,
+        endTime: slot.end
+      });
+    }
+    
+    // Convert to array format expected by frontend
+    const dailyAvailability = Object.keys(slotsByDay).map(date => ({
+      date,
+      slots: slotsByDay[date]
+    }));
+
     res.status(200).json({ 
-      availableSlots,
-      count: availableSlots.length
+      doctorId,
+      availableSlots: dailyAvailability
     });
   } catch (error) {
     logger.error('Error in getDoctorAvailability function:', error);

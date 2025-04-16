@@ -43,7 +43,12 @@ export default function ScheduleForm({ onCancel, onSuccess }: ScheduleFormProps)
         slotDuration
       };
       
+      console.log('Creating schedule with data:', scheduleData);
+      console.log('API URL:', process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1');
+      
       const result = await createSchedule(scheduleData);
+      
+      console.log('Schedule creation result:', result);
       
       if (result) {
         onSuccess();
@@ -52,6 +57,7 @@ export default function ScheduleForm({ onCancel, onSuccess }: ScheduleFormProps)
       }
     } catch (err: any) {
       console.error('Error creating schedule:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
       
       // Check if it's a conflict error (schedule already exists for this day)
       if (err.status === 409) {

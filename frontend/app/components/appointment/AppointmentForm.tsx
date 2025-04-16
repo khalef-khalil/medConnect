@@ -45,13 +45,13 @@ export default function AppointmentForm() {
   
   useEffect(() => {
     if (doctorId) {
-      // Set date range for next 2 weeks
+      // Set date range for next 4 weeks (instead of 2)
       const today = new Date();
-      const twoWeeksLater = new Date();
-      twoWeeksLater.setDate(today.getDate() + 14);
+      const fourWeeksLater = new Date();
+      fourWeeksLater.setDate(today.getDate() + 28);
       
       const formattedStartDate = today.toISOString().split('T')[0];
-      const formattedEndDate = twoWeeksLater.toISOString().split('T')[0];
+      const formattedEndDate = fourWeeksLater.toISOString().split('T')[0];
       
       setStartDate(formattedStartDate);
       setEndDate(formattedEndDate);
@@ -156,6 +156,40 @@ export default function AppointmentForm() {
     );
   }
   
+  // Group available days by week for better display
+  const getWeeksWithAvailability = () => {
+    const daysWithSlots = getDaysWithSlots();
+    if (!daysWithSlots.length) return [];
+    
+    // Group days into weeks
+    const weeks: DailyAvailability[][] = [];
+    let currentWeek: DailyAvailability[] = [];
+    
+    daysWithSlots
+      .filter(day => day && day.date && day.slots && day.slots.length > 0)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .forEach(day => {
+        const date = new Date(day.date);
+        
+        // If it's the first day or a Sunday (0), start a new week
+        if (currentWeek.length === 0 || date.getDay() === 0) {
+          if (currentWeek.length > 0) {
+            weeks.push(currentWeek);
+          }
+          currentWeek = [day];
+        } else {
+          currentWeek.push(day);
+        }
+      });
+    
+    // Add the last week if it has days
+    if (currentWeek.length > 0) {
+      weeks.push(currentWeek);
+    }
+    
+    return weeks;
+  };
+  
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -188,63 +222,84 @@ export default function AppointmentForm() {
         </div>
         
         <div className="mb-6">
-          <label className="block text-gray-700 font-medium mb-2">Select Date</label>
+          <label className="block text-gray-700 font-medium mb-2">Available Dates</label>
           {loading ? (
             <div className="flex justify-center items-center py-4">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary-600"></div>
               <span className="ml-2 text-gray-600">Loading available dates...</span>
             </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
-              {getDaysWithSlots().length > 0 ? (
-                getDaysWithSlots()
-                  .filter(day => day && day.date && day.slots && day.slots.length > 0)
-                  .map((day) => {
-                    try {
-                      if (!day || !day.date) return null;
-                      
-                      const date = new Date(day.date);
-                      const isSelected = selectedDate === day.date;
-                      
-                      if (isNaN(date.getTime())) {
-                        return null;
-                      }
-                      
-                      return (
-                        <motion.button
-                          key={day.date}
-                          type="button"
-                          className={`p-3 rounded-lg text-center transition-colors ${
-                            isSelected
-                              ? 'bg-primary-600 text-white'
-                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                          }`}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => {
-                            setSelectedDate(day.date);
-                            setSelectedTimeSlot(null);
-                          }}
-                        >
-                          <div className="text-xs mb-1">
-                            {date.toLocaleDateString('en-US', { weekday: 'short' })}
-                          </div>
-                          <div className="font-medium">
-                            {date.getDate()}
-                          </div>
-                          <div className="text-xs">
-                            {date.toLocaleDateString('en-US', { month: 'short' })}
-                          </div>
-                        </motion.button>
-                      );
-                    } catch (error) {
-                      console.error("Error rendering date:", error);
-                      return null;
-                    }
-                  })
+            <div className="space-y-4">
+              {getWeeksWithAvailability().length > 0 ? (
+                getWeeksWithAvailability().map((week, weekIndex) => (
+                  <div key={`week-${weekIndex}`} className="mb-6">
+                    <div className="text-sm font-medium text-gray-500 mb-2">
+                      Week {weekIndex + 1}
+                    </div>
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                      {week.map((day) => {
+                        try {
+                          if (!day || !day.date) return null;
+                          
+                          const date = new Date(day.date);
+                          const isSelected = selectedDate === day.date;
+                          
+                          if (isNaN(date.getTime())) {
+                            return null;
+                          }
+                          
+                          return (
+                            <motion.button
+                              key={day.date}
+                              type="button"
+                              className={`p-3 rounded-lg text-center transition-colors ${
+                                isSelected
+                                  ? 'bg-primary-600 text-white'
+                                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                              } flex flex-col items-center`}
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => {
+                                setSelectedDate(day.date);
+                                setSelectedTimeSlot(null);
+                              }}
+                            >
+                              <div className="text-xs font-medium mb-1">
+                                {date.toLocaleDateString('en-US', { weekday: 'short' })}
+                              </div>
+                              <div className="font-medium">
+                                {date.getDate()}
+                              </div>
+                              <div className="text-xs">
+                                {date.toLocaleDateString('en-US', { month: 'short' })}
+                              </div>
+                              <div className="text-xs mt-1 text-primary-500">
+                                {day.slots.length} slots
+                              </div>
+                            </motion.button>
+                          );
+                        } catch (error) {
+                          console.error("Error rendering date:", error);
+                          return null;
+                        }
+                      })}
+                    </div>
+                  </div>
+                ))
               ) : (
-                <div className="col-span-full text-center py-4 text-gray-500">
-                  No available dates found for the next two weeks.
+                <div className="bg-yellow-50 text-yellow-800 p-4 rounded-lg">
+                  <div className="font-medium mb-1">No available appointments</div>
+                  <p className="text-sm">
+                    Dr. {doctor.lastName} hasn't set up their schedule yet for the next 4 weeks. 
+                    Please check back later or select another doctor.
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-3 text-sm bg-white py-1 px-3 rounded border border-yellow-300 hover:bg-yellow-50 transition-colors"
+                    onClick={() => router.push('/doctors')}
+                  >
+                    Find Another Doctor
+                  </button>
                 </div>
               )}
             </div>
@@ -258,8 +313,17 @@ export default function AppointmentForm() {
             animate={{ opacity: 1, height: 'auto' }}
             transition={{ duration: 0.3 }}
           >
-            <label className="block text-gray-700 font-medium mb-2">Select Time</label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-gray-700 font-medium">
+                Available Time Slots for {new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </label>
+              {selectedTimeSlot && (
+                <span className="text-sm text-primary-600 font-medium">
+                  Selected: {formatTimeSlot(selectedTimeSlot)}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {getSlotsForDay(selectedDate).length > 0 ? (
                 getSlotsForDay(selectedDate)
                   .filter(slot => slot && slot.startTime && slot.endTime)
@@ -276,19 +340,27 @@ export default function AppointmentForm() {
                         selectedTimeSlot.startTime === slot.startTime && 
                         selectedTimeSlot.endTime === slot.endTime;
                       
+                      // Group by morning, afternoon, evening
+                      const hour = startTime.getHours();
+                      let timeGroup = '';
+                      if (hour < 12) timeGroup = 'Morning';
+                      else if (hour < 17) timeGroup = 'Afternoon';
+                      else timeGroup = 'Evening';
+                      
                       return (
                         <motion.button
                           key={`${slot.startTime}-${index}`}
                           type="button"
                           className={`p-3 rounded-lg text-center transition-colors ${
                             isSelected
-                              ? 'bg-primary-600 text-white'
-                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                              ? 'bg-primary-600 text-white border-2 border-primary-700'
+                              : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200'
                           }`}
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={() => setSelectedTimeSlot(slot)}
                         >
+                          <div className="text-xs mb-1 font-medium opacity-75">{timeGroup}</div>
                           {formatTimeSlot(slot)}
                         </motion.button>
                       );
