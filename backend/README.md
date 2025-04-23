@@ -47,11 +47,11 @@ The server will start on http://localhost:3000 by default.
 
 The application supports multiple ways to authenticate with AWS:
 
-1. **AWS CLI credentials** - If you have AWS CLI installed and configured (via `aws configure`), the application will automatically use those credentials.
+1. **Environment Variables (Recommended)** - Set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your `.env` file. This is the easiest method for team members who don't have AWS CLI installed.
 
 2. **IAM Roles** - When deployed to AWS services like EC2, ECS, or Lambda, you can use IAM roles for authentication without storing credentials in the application.
 
-3. **Environment Variables** - You can set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your `.env` file or at the system level.
+3. **AWS CLI credentials** - If you have AWS CLI installed and configured (via `aws configure`), you'll need to set `AWS_SDK_LOAD_CONFIG=1` in your environment to use these credentials.
 
 4. **Named Profiles** - Set `AWS_PROFILE` in your environment to use a specific profile from your AWS CLI configuration.
 

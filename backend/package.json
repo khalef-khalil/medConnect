@@ -4,8 +4,8 @@
   "description": "Backend for MedConnect telemedicine application",
   "main": "src/server.js",
   "scripts": {
-    "start": "AWS_SDK_LOAD_CONFIG=1 node src/server.js",
-    "dev": "AWS_SDK_LOAD_CONFIG=1 nodemon src/server.js",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "test": "jest"
   },
   "dependencies": {
