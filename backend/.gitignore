@@ -38,5 +38,3 @@ temp/
 
 # AWS credentials
 .aws/
-credentials
-config 
