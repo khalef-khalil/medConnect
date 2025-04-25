@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '../store/authStore';
 import AuthLayout from '../components/layout/AuthLayout';
 import io, { Socket } from 'socket.io-client';
@@ -32,6 +32,9 @@ interface Conversation {
 export default function MessagesPage() {
   const { user, token } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlConversationId = searchParams.get('conversationId');
+  
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -78,8 +81,20 @@ export default function MessagesPage() {
           const data = await response.json();
           setConversations(data.conversations);
           
-          // If we have conversations, select the first one by default
-          if (data.conversations && data.conversations.length > 0 && !selectedConversation) {
+          // Select conversation from URL if provided and exists in the list
+          if (urlConversationId && data.conversations) {
+            const conversationExists = data.conversations.some(
+              (conv: Conversation) => conv.conversationId === urlConversationId
+            );
+            
+            if (conversationExists) {
+              setSelectedConversation(urlConversationId);
+            } else if (data.conversations.length > 0) {
+              // If URL conversation doesn't exist, select first one
+              setSelectedConversation(data.conversations[0].conversationId);
+            }
+          } else if (data.conversations && data.conversations.length > 0 && !selectedConversation) {
+            // If no URL param and no selection yet, select first conversation
             setSelectedConversation(data.conversations[0].conversationId);
           }
         }
@@ -91,7 +106,7 @@ export default function MessagesPage() {
     };
 
     fetchConversations();
-  }, [user, token, selectedConversation]);
+  }, [user, token, urlConversationId]);
 
   // Join conversations via WebSocket
   useEffect(() => {

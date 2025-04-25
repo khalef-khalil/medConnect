@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Doctor } from '../../types/appointment';
+import { useAuthStore } from '../../store/authStore';
 
 interface DoctorDetailsProps {
   doctor: Doctor;
@@ -10,7 +11,59 @@ interface DoctorDetailsProps {
 
 export default function DoctorDetails({ doctor }: DoctorDetailsProps) {
   const router = useRouter();
+  const { token, user } = useAuthStore();
   const defaultProfileImage = '/assets/default-avatar.png';
+  const [hasAppointment, setHasAppointment] = useState(false);
+  const [confirmedAppointment, setConfirmedAppointment] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if the user has any appointments with this doctor
+    const checkAppointments = async () => {
+      if (!user || !token) return;
+
+      try {
+        setLoading(true);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/v1/appointments`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const appointments = data.appointments || [];
+          
+          // Check if any appointments with this doctor exist
+          const doctorAppointments = appointments.filter(
+            (appointment: any) => appointment.doctorId === doctor.userId
+          );
+          
+          setHasAppointment(doctorAppointments.length > 0);
+          
+          // Check if any confirmed appointments exist
+          const confirmed = doctorAppointments.some(
+            (appointment: any) => appointment.status === 'confirmed'
+          );
+          
+          setConfirmedAppointment(confirmed);
+        }
+      } catch (error) {
+        console.error('Error checking appointments:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAppointments();
+  }, [doctor.userId, token, user]);
+
+  const startConversation = () => {
+    // Create a conversation ID by sorting user IDs to ensure consistency
+    const participants = [user?.userId, doctor.userId].sort();
+    const conversationId = `${participants[0]}_${participants[1]}`;
+    router.push(`/messages?conversationId=${conversationId}`);
+  };
   
   return (
     <motion.div
@@ -81,29 +134,32 @@ export default function DoctorDetails({ doctor }: DoctorDetailsProps) {
           </div>
           
           <div className="flex flex-col sm:flex-row gap-4">
-            <motion.button
-              className="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-lg font-medium transition-colors"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => router.push(`/appointments/new?doctorId=${doctor.userId}`)}
-            >
-              Book an Appointment
-            </motion.button>
+            {/* Only show Book Appointment button if no confirmed appointment */}
+            {!confirmedAppointment && (
+              <motion.button
+                className="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-3 rounded-lg font-medium transition-colors"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => router.push(`/appointments/new?doctorId=${doctor.userId}`)}
+              >
+                Book an Appointment
+              </motion.button>
+            )}
             
-            <motion.button
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition-colors flex items-center justify-center"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => {
-                // Do nothing when clicked - messaging feature removed
-                console.log('Messaging feature has been removed');
-              }}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-              Start a Conversation
-            </motion.button>
+            {/* Only show Start Conversation button if has confirmed appointment */}
+            {confirmedAppointment && (
+              <motion.button
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-medium transition-colors flex items-center justify-center"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={startConversation}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                </svg>
+                Start a Conversation
+              </motion.button>
+            )}
           </div>
         </motion.div>
       </div>
