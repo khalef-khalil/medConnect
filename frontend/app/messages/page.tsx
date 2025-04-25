@@ -41,6 +41,20 @@ export default function MessagesPage() {
   const [newMessage, setNewMessage] = useState('');
   const [socket, setSocket] = useState<Socket | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  
+  // Create a ref for the messages container to enable auto-scrolling
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Function to scroll to the bottom of the messages
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Auto-scroll when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -225,6 +239,9 @@ export default function MessagesPage() {
     const conversation = conversations.find(c => c.conversationId === selectedConversation);
     if (!conversation) return;
 
+    // Set loading state
+    setSendingMessage(true);
+
     // Send message via WebSocket
     socket.emit('send-message', {
       conversationId: selectedConversation,
@@ -234,6 +251,11 @@ export default function MessagesPage() {
 
     // Clear input
     setNewMessage('');
+    
+    // Reset sending state after a short delay (the message should appear in the conversation when the server emits it back)
+    setTimeout(() => {
+      setSendingMessage(false);
+    }, 1000);
   };
 
   // Format date
@@ -398,10 +420,37 @@ export default function MessagesPage() {
                         </motion.div>
                       </div>
                     ))}
+                    {/* This div is used for auto-scrolling */}
+                    <div ref={messagesEndRef} />
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-500">No messages yet. Start the conversation!</p>
+                  <div className="flex flex-col items-center justify-center h-full space-y-4">
+                    <div className="text-center">
+                      <p className="text-gray-500 mb-4">No messages yet. Start the conversation!</p>
+                      <div className="w-full max-w-md bg-white rounded-lg shadow-sm p-6 border border-gray-100">
+                        <h3 className="text-lg font-medium text-primary-600 mb-3">Send your first message</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label htmlFor="firstMessage" className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                            <textarea
+                              id="firstMessage"
+                              rows={3}
+                              value={newMessage}
+                              onChange={(e) => setNewMessage(e.target.value)}
+                              placeholder="Type your message here..."
+                              className="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                            />
+                          </div>
+                          <button
+                            onClick={handleSendMessage}
+                            disabled={!newMessage.trim()}
+                            className="w-full bg-primary-600 text-white py-2 px-4 rounded-lg disabled:opacity-50 hover:bg-primary-700 transition-colors"
+                          >
+                            Send Message
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -413,19 +462,31 @@ export default function MessagesPage() {
                     type="text"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                     placeholder="Type a message..."
                     className="flex-1 border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    disabled={sendingMessage}
                   />
                   <button
                     onClick={handleSendMessage}
-                    disabled={!newMessage.trim()}
-                    className="bg-primary-600 text-white p-2 rounded-lg disabled:opacity-50"
+                    disabled={!newMessage.trim() || sendingMessage}
+                    className="bg-primary-600 hover:bg-primary-700 text-white p-2 rounded-lg disabled:opacity-50 transition-colors"
+                    aria-label="Send message"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
+                    {sendingMessage ? (
+                      <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                      </svg>
+                    )}
                   </button>
+                </div>
+                <div className="text-xs text-gray-500 mt-1 px-2">
+                  Press Enter to send, Shift+Enter for a new line
                 </div>
               </div>
             </>
