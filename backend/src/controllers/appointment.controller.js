@@ -1,7 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { dynamoDB, TABLES } = require('../config/aws');
 const { logger } = require('../utils/logger');
-const { notifyAppointment } = require('../services/notification.service');
 
 /**
  * Get all appointments for the logged-in user based on their role
@@ -310,15 +309,6 @@ exports.createAppointment = async (req, res) => {
       Item: newAppointment
     }).promise();
 
-    // Send notifications to both patient and doctor
-    try {
-      await notifyAppointment(patientId, newAppointment, 'created');
-      await notifyAppointment(doctorId, newAppointment, 'created');
-    } catch (notifyError) {
-      // Log but don't fail if notifications fail
-      logger.error('Error sending appointment notifications:', notifyError);
-    }
-
     res.status(201).json({ 
       message: 'Appointment created successfully',
       appointment: newAppointment 
@@ -440,15 +430,6 @@ exports.updateAppointment = async (req, res) => {
       const updateResult = await dynamoDB.update(updateParams).promise();
       const updatedAppointment = updateResult.Attributes;
 
-      // Send notifications to patient and doctor
-      try {
-        await notifyAppointment(updatedAppointment.patientId, updatedAppointment, 'updated');
-        await notifyAppointment(updatedAppointment.doctorId, updatedAppointment, 'updated');
-      } catch (notifyError) {
-        // Log but don't fail if notifications fail
-        logger.error('Error sending appointment update notifications:', notifyError);
-      }
-
       return res.status(200).json({
         message: 'Appointment updated successfully',
         appointment: updatedAppointment
@@ -495,15 +476,6 @@ exports.deleteAppointment = async (req, res) => {
       TableName: TABLES.APPOINTMENTS,
       Key: { appointmentId }
     }).promise();
-
-    // Notify both patient and doctor about the deletion
-    try {
-      await notifyAppointment(appointment.patientId, appointment, 'canceled');
-      await notifyAppointment(appointment.doctorId, appointment, 'canceled');
-    } catch (notifyError) {
-      // Log but don't fail if notifications fail
-      logger.error('Error sending appointment notifications:', notifyError);
-    }
 
     res.status(200).json({ message: 'Appointment successfully deleted' });
   } catch (error) {

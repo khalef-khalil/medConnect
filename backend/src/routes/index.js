@@ -7,9 +7,6 @@ const userController = require('../controllers/user.controller');
 const appointmentController = require('../controllers/appointment.controller');
 const scheduleController = require('../controllers/schedule.controller');
 const videoController = require('../controllers/video.controller');
-const chatController = require('../controllers/chat.controller');
-const paymentController = require('../controllers/payment.controller');
-const notificationController = require('../controllers/notification.controller');
 
 // User routes
 router.use('/users', require('./user.routes'));
@@ -22,15 +19,6 @@ router.use('/schedules', require('./schedule.routes'));
 
 // Video routes
 router.use('/video', require('./video.routes'));
-
-// Chat routes
-router.use('/chats', require('./chat.routes'));
-
-// Payment routes
-router.use('/payments', require('./payment.routes'));
-
-// Notification routes
-router.use('/notifications', require('./notification.routes'));
 
 // Additional Appointment routes
 router.get('/doctors/:doctorId/availability', verifyToken, appointmentController.getDoctorAvailability);

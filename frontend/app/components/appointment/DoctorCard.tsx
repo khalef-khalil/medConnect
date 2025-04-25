@@ -64,7 +64,7 @@ export default function DoctorCard({ doctor }: DoctorCardProps) {
             className="w-full bg-green-50 hover:bg-green-100 text-green-600 py-2 px-4 rounded-lg text-sm font-medium transition-colors"
             onClick={(e) => {
               e.stopPropagation();
-              router.push(`/messages/new?doctorId=${doctor.userId}`);
+              console.log('Messaging feature has been removed');
             }}
           >
             <div className="flex items-center justify-center">
