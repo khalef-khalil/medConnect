@@ -145,7 +145,7 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
     return status === 'pending' || status === 'scheduled';
   };
 
-  // Update the getStatusColor function to handle 'scheduled' status
+  // Update the getStatusColor function to handle payment status
   const getStatusColor = (status?: string) => {
     if (!status) {
       return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -161,6 +161,23 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
         return 'bg-red-100 text-red-800 border-red-200';
       case 'completed':
         return 'bg-blue-100 text-blue-800 border-blue-200';
+      default:
+        return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getPaymentStatusColor = (status?: string) => {
+    if (!status) {
+      return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+    
+    switch (status) {
+      case 'paid':
+        return 'bg-green-100 text-green-800 border-green-200';
+      case 'pending':
+        return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'refunded':
+        return 'bg-orange-100 text-orange-800 border-orange-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -240,8 +257,15 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
               )}
             </p>
           </div>
-          <div className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(appointment.status)}`}>
-            {appointment.status?.charAt(0).toUpperCase() + appointment.status?.slice(1) || 'Unknown'}
+          <div className="flex space-x-2">
+            {appointment.paymentStatus && (
+              <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getPaymentStatusColor(appointment.paymentStatus)}`}>
+                {appointment.paymentStatus.charAt(0).toUpperCase() + appointment.paymentStatus.slice(1)}
+              </div>
+            )}
+            <div className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(appointment.status)}`}>
+              {appointment.status?.charAt(0).toUpperCase() + appointment.status?.slice(1) || 'Unknown'}
+            </div>
           </div>
         </div>
         
@@ -328,110 +352,140 @@ export default function AppointmentDetails({ appointment }: AppointmentDetailsPr
           </div>
         )}
         
+        {/* Add Payment Section */}
+        {appointment.paymentStatus === 'pending' && !isDoctor() && (
+          <div className="mt-8 p-4 border border-yellow-200 bg-yellow-50 rounded-lg">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Payment Required</h3>
+                <p className="text-gray-600 mb-4 md:mb-0">
+                  Please complete your payment to confirm this appointment.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push(`/appointments/${appointment.appointmentId}/payment`)}
+                className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-2 rounded-lg transition-colors"
+              >
+                Pay Now
+              </button>
+            </div>
+          </div>
+        )}
+        
+        {appointment.paymentStatus === 'paid' && (
+          <div className="mt-8 p-4 border border-green-200 bg-green-50 rounded-lg">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">Payment Completed</h3>
+                <p className="text-gray-600">
+                  This appointment has been fully paid.
+                </p>
+              </div>
+              <button
+                onClick={() => router.push(`/payments/history`)}
+                className="text-primary-600 hover:text-primary-700 font-medium"
+              >
+                View Payment History
+              </button>
+            </div>
+          </div>
+        )}
+        
         <div className="flex flex-col sm:flex-row justify-end gap-3">
-          <button
-            className="px-6 py-3 border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
-            onClick={() => router.push('/appointments')}
-          >
-            Back to Appointments
-          </button>
-          
-          {/* Doctor actions for pending appointments */}
-          {isDoctor() && needsConfirmation(appointment.status) && isUpcoming() && (
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          {/* Only show action buttons for upcoming appointments */}
+          {isUpcoming() && (
             <>
-              <motion.button
-                className="px-6 py-3 bg-red-600 text-white rounded-lg disabled:opacity-70 hover:bg-red-700 transition-colors"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleStatusUpdate('cancelled')}
-                disabled={statusLoading}
-              >
-                {statusLoading ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                    Processing...
-                  </div>
-                ) : (
-                  'Deny Appointment'
-                )}
-              </motion.button>
-              
-              <motion.button
-                className="px-6 py-3 bg-green-600 text-white rounded-lg disabled:opacity-70 hover:bg-green-700 transition-colors"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => handleStatusUpdate('confirmed')}
-                disabled={statusLoading}
-              >
-                {statusLoading ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                    Processing...
-                  </div>
-                ) : (
-                  'Confirm Appointment'
-                )}
-              </motion.button>
-            </>
-          )}
-          
-          {/* Patient cancel button */}
-          {!isDoctor() && isUpcoming() && (
-            <motion.button
-              className="px-6 py-3 bg-red-600 text-white rounded-lg disabled:opacity-70 hover:bg-red-700 transition-colors"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handleCancel}
-              disabled={loading}
-            >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                  Cancelling...
-                </div>
-              ) : (
-                'Cancel Appointment'
+              {/* Show pay now button for patients with pending payments */}
+              {appointment.paymentStatus === 'pending' && !isDoctor() && (
+                <button
+                  onClick={() => router.push(`/appointments/${appointment.appointmentId}/payment`)}
+                  className="inline-flex items-center justify-center bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                  Pay Now
+                </button>
               )}
-            </motion.button>
-          )}
-          
-          {/* Video call button - conditionally enabled based on role, session existence, and rate limits */}
-          {showJoinVideoButton && (
-            <motion.button
-              className={`px-6 py-3 ${isJoinButtonEnabled ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-400 cursor-not-allowed'} text-white rounded-lg transition-colors flex items-center`}
-              whileHover={isJoinButtonEnabled ? { scale: 1.02 } : {}}
-              whileTap={isJoinButtonEnabled ? { scale: 0.98 } : {}}
-              onClick={isJoinButtonEnabled ? () => router.push(`/video/${appointment.appointmentId}`) : undefined}
-              disabled={!isJoinButtonEnabled || checkingSession || checkLimitReached}
-            >
-              {checkingSession ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></div>
-                  Checking availability...
-                </>
-              ) : checkLimitReached ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Try again in a moment
-                </>
-              ) : !isDoctor() && !sessionExists ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                  Waiting for doctor
-                </>
-              ) : (
-                <>
+              
+              {/* Show join video button if appointment is confirmed */}
+              {showJoinVideoButton && (
+                <button
+                  onClick={() => router.push(`/video/${appointment.appointmentId}`)}
+                  className={`inline-flex items-center justify-center ${isJoinButtonEnabled ? 'bg-primary-600 hover:bg-primary-700' : 'bg-gray-300 cursor-not-allowed'} text-white font-medium px-4 py-2 rounded-lg transition-colors`}
+                  disabled={!isJoinButtonEnabled}
+                >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
-                  Join Video Call
-                </>
+                  {isDoctor() ? 'Start Video Call' : (
+                    sessionExists ? 'Join Video Call' : 'Waiting for Doctor to Start'
+                  )}
+                  {checkingSession && !isDoctor() && (
+                    <span className="ml-2 animate-pulse">•</span>
+                  )}
+                </button>
               )}
-            </motion.button>
+
+              {/* Show confirmation buttons for doctors with pending appointments */}
+              {isDoctor() && needsConfirmation(appointment.status) && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleStatusUpdate('confirmed')}
+                    disabled={statusLoading}
+                    className="inline-flex items-center justify-center bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {statusLoading ? (
+                      <span className="flex items-center">
+                        <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-white mr-2"></span>
+                        Processing...
+                      </span>
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Confirm
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => handleStatusUpdate('cancelled')}
+                    disabled={statusLoading}
+                    className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Deny
+                  </button>
+                </div>
+              )}
+
+              {/* Show cancel button for all users with confirmed appointments */}
+              {appointment.status !== 'cancelled' && (
+                <button
+                  onClick={handleCancel}
+                  disabled={loading}
+                  className="inline-flex items-center justify-center border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {loading ? (
+                    <span className="flex items-center">
+                      <span className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-700 mr-2"></span>
+                      Cancelling...
+                    </span>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Cancel Appointment
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>

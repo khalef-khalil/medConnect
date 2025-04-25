@@ -9,19 +9,20 @@ const scheduleController = require('../controllers/schedule.controller');
 const videoController = require('../controllers/video.controller');
 
 // User routes
-router.use('/users', require('./user.routes'));
+const userRoutes = require('./user.routes');
+const appointmentRoutes = require('./appointment.routes');
+const messageRoutes = require('./message.routes');
+const scheduleRoutes = require('./schedule.routes');
+const videoRoutes = require('./video.routes');
+const paymentRoutes = require('./payment.routes');
 
-// Appointment routes
-router.use('/appointments', require('./appointment.routes'));
-
-// Schedule routes
-router.use('/schedules', require('./schedule.routes'));
-
-// Video routes
-router.use('/video', require('./video.routes'));
-
-// Messages routes
-router.use('/messages', require('./message.routes'));
+// API routes
+router.use('/users', userRoutes);
+router.use('/appointments', appointmentRoutes);
+router.use('/messages', messageRoutes);
+router.use('/schedules', scheduleRoutes);
+router.use('/video', videoRoutes);
+router.use('/payments', paymentRoutes);
 
 // Additional Appointment routes
 router.get('/doctors/:doctorId/availability', verifyToken, appointmentController.getDoctorAvailability);

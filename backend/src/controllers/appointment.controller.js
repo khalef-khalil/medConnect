@@ -123,7 +123,8 @@ exports.createAppointment = async (req, res) => {
       startTime, 
       endTime, 
       appointmentType,
-      notes
+      notes,
+      paymentStatus
     } = req.body;
 
     // Validate required fields
@@ -290,28 +291,35 @@ exports.createAppointment = async (req, res) => {
 
     // Create new appointment
     const appointmentId = uuidv4();
-    const newAppointment = {
+    const timestamp = new Date().toISOString();
+    
+    // Determine appointment status based on payment status
+    // If it's a pre-paid appointment, mark as confirmed; otherwise pending
+    const initialStatus = paymentStatus === 'paid' ? 'confirmed' : 'pending';
+    const initialPaymentStatus = paymentStatus || 'pending';
+    
+    const appointment = {
       appointmentId,
       patientId,
       doctorId,
       startTime: startDate.toISOString(),
       endTime: endDate.toISOString(),
+      status: initialStatus,
+      paymentStatus: initialPaymentStatus,
       appointmentType,
       notes: notes || '',
-      status: 'scheduled',
-      createdBy: userId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      createdAt: timestamp,
+      updatedAt: timestamp
     };
 
     await dynamoDB.put({
       TableName: TABLES.APPOINTMENTS,
-      Item: newAppointment
+      Item: appointment
     }).promise();
 
     res.status(201).json({ 
       message: 'Appointment created successfully',
-      appointment: newAppointment 
+      appointment: appointment 
     });
   } catch (error) {
     logger.error('Error in createAppointment function:', error);

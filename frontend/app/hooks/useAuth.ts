@@ -34,6 +34,9 @@ export function useAuth() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Get the authentication token from Zustand store
+  const authToken = token;
+
   // Setup axios interceptors for token refresh
   useEffect(() => {
     // Setup a request interceptor to add the token to all requests
@@ -293,13 +296,14 @@ export function useAuth() {
   }, [token, updateUser]);
 
   return {
+    authToken,
+    loading,
+    error,
     login,
     register,
     logout,
     getProfile,
     updateProfile,
     refreshToken,
-    loading,
-    error,
   };
 } 

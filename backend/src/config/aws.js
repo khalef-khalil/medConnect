@@ -114,7 +114,8 @@ const initializeDynamoDB = async () => {
       AttributeDefinitions: [
         { AttributeName: 'paymentId', AttributeType: 'S' },
         { AttributeName: 'appointmentId', AttributeType: 'S' },
-        { AttributeName: 'userId', AttributeType: 'S' }
+        { AttributeName: 'patientId', AttributeType: 'S' },
+        { AttributeName: 'doctorId', AttributeType: 'S' }
       ],
       GlobalSecondaryIndexes: [
         {
@@ -124,8 +125,14 @@ const initializeDynamoDB = async () => {
           ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
         },
         {
-          IndexName: 'UserIndex',
-          KeySchema: [{ AttributeName: 'userId', KeyType: 'HASH' }],
+          IndexName: 'PatientIndex',
+          KeySchema: [{ AttributeName: 'patientId', KeyType: 'HASH' }],
+          Projection: { ProjectionType: 'ALL' },
+          ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+        },
+        {
+          IndexName: 'DoctorIndex',
+          KeySchema: [{ AttributeName: 'doctorId', KeyType: 'HASH' }],
           Projection: { ProjectionType: 'ALL' },
           ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
         }

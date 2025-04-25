@@ -128,16 +128,12 @@ export default function AppointmentForm() {
         notes
       };
       
-      const result = await createNewAppointment(appointmentData);
-      
-      if (result) {
-        router.push('/appointments');
-      } else {
-        setError('Failed to book appointment. Please try again.');
-      }
+      // Instead of creating appointment right away, store data in localStorage
+      // and redirect to payment page
+      localStorage.setItem('pendingAppointment', JSON.stringify(appointmentData));
+      router.push('/payments/process/new');
     } catch (err) {
       setError('An error occurred. Please try again.');
-    } finally {
       setSubmitting(false);
     }
   };

@@ -76,11 +76,60 @@ export default function DashboardPage() {
               }
               onClick={() => router.push('/messages')}
             />
+            <DashboardCard 
+              title="Payment History"
+              description="View your payment history and receipts"
+              icon={
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              }
+              onClick={() => router.push('/payments/history')}
+            />
           </div>
         );
       
       case 'doctor':
-        return <DoctorDashboard />;
+        return (
+          <>
+            <DoctorDashboard />
+            <div className="mt-8">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">Quick Actions</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <DashboardCard 
+                  title="Payment History"
+                  description="View all payments received from patients"
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  }
+                  onClick={() => router.push('/payments/history')}
+                />
+                <DashboardCard 
+                  title="My Appointments"
+                  description="View your upcoming and past appointments"
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  }
+                  onClick={() => router.push('/appointments')}
+                />
+                <DashboardCard 
+                  title="Messages"
+                  description="View and manage your conversations"
+                  icon={
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  }
+                  onClick={() => router.push('/messages')}
+                />
+              </div>
+            </div>
+          </>
+        );
       
       case 'admin':
         return (
