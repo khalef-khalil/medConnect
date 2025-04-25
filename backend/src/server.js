@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const socketIo = require('socket.io');
 const { logger } = require('./utils/logger');
 const { initializeResources } = require('./utils/init');
 const { getPrimaryLocalIpAddress, logNetworkInterfaces } = require('./utils/network');
@@ -89,8 +90,143 @@ app.use((err, req, res, next) => {
     
     // Start HTTP server
     const HOST = process.env.HOST || '0.0.0.0';
-    http.createServer(app).listen(PORT, HOST, () => {
+    const httpServer = http.createServer(app);
+    
+    // Initialize Socket.IO with CORS settings
+    const io = socketIo(httpServer, {
+      cors: {
+        origin: "*",
+        methods: ["GET", "POST"],
+        credentials: true
+      }
+    });
+    
+    // WebSocket messaging handling
+    const connectedUsers = new Map(); // Map userId -> socket.id
+    
+    io.use((socket, next) => {
+      const token = socket.handshake.auth.token;
+      if (!token) {
+        return next(new Error('Authentication error'));
+      }
+      
+      // Verify token and extract user info
+      try {
+        const jwt = require('jsonwebtoken');
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        socket.user = decoded;
+        next();
+      } catch (err) {
+        return next(new Error('Authentication error'));
+      }
+    });
+    
+    io.on('connection', (socket) => {
+      const userId = socket.user.userId;
+      logger.info(`User connected: ${userId}`);
+      
+      // Store the connection
+      connectedUsers.set(userId, socket.id);
+      
+      // Join rooms for user's conversations
+      socket.on('join-conversations', async (conversationIds) => {
+        if (Array.isArray(conversationIds)) {
+          conversationIds.forEach(id => {
+            socket.join(`conversation:${id}`);
+            logger.info(`User ${userId} joined conversation: ${id}`);
+          });
+        }
+      });
+      
+      // Handle sending messages
+      socket.on('send-message', async (data) => {
+        try {
+          const { conversationId, content, recipientId } = data;
+          
+          if (!conversationId || !content) {
+            socket.emit('error', { message: 'Missing required fields' });
+            return;
+          }
+          
+          // Create message in database
+          const { v4: uuidv4 } = require('uuid');
+          const { dynamoDB, TABLES } = require('./config/aws');
+          
+          const messageId = uuidv4();
+          const message = {
+            messageId,
+            conversationId,
+            senderId: userId,
+            recipientId,
+            content,
+            timestamp: Date.now(),
+            isRead: false
+          };
+          
+          await dynamoDB.put({
+            TableName: TABLES.MESSAGES,
+            Item: message
+          }).promise();
+          
+          // Emit to all participants in the conversation
+          io.to(`conversation:${conversationId}`).emit('new-message', message);
+          
+          logger.info(`Message sent in conversation ${conversationId}`);
+        } catch (error) {
+          logger.error('Error sending message:', error);
+          socket.emit('error', { message: 'Failed to send message' });
+        }
+      });
+      
+      // Mark messages as read
+      socket.on('mark-read', async (data) => {
+        try {
+          const { messageIds } = data;
+          
+          if (!messageIds || !Array.isArray(messageIds)) {
+            socket.emit('error', { message: 'Invalid message IDs' });
+            return;
+          }
+          
+          const { dynamoDB, TABLES } = require('./config/aws');
+          
+          // Update each message
+          const updatePromises = messageIds.map(messageId => {
+            return dynamoDB.update({
+              TableName: TABLES.MESSAGES,
+              Key: { messageId },
+              UpdateExpression: 'set isRead = :isRead',
+              ExpressionAttributeValues: {
+                ':isRead': true
+              }
+            }).promise();
+          });
+          
+          await Promise.all(updatePromises);
+          
+          // Emit read status update to conversation participants
+          socket.to(`conversation:${data.conversationId}`).emit('messages-read', {
+            messageIds,
+            readBy: userId
+          });
+          
+          logger.info(`Messages marked as read by ${userId}`);
+        } catch (error) {
+          logger.error('Error marking messages as read:', error);
+          socket.emit('error', { message: 'Failed to mark messages as read' });
+        }
+      });
+      
+      // Handle user disconnect
+      socket.on('disconnect', () => {
+        connectedUsers.delete(userId);
+        logger.info(`User disconnected: ${userId}`);
+      });
+    });
+    
+    httpServer.listen(PORT, HOST, () => {
       logger.info(`HTTP Server running on http://${HOST}:${PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+      logger.info(`WebSocket server initialized on the same port`);
       logger.info(`CORS enabled for ALL origins (development mode)`);
     });
     
@@ -105,8 +241,140 @@ app.use((err, req, res, next) => {
         cert: fs.readFileSync(certPath)
       };
       
-      https.createServer(httpsOptions, app).listen(HTTPS_PORT, HOST, () => {
+      const httpsServer = https.createServer(httpsOptions, app);
+      
+      // Initialize Socket.IO for HTTPS as well
+      const httpsIo = socketIo(httpsServer, {
+        cors: {
+          origin: "*",
+          methods: ["GET", "POST"],
+          credentials: true
+        }
+      });
+      
+      // Use the same event handlers for HTTPS socket.io server
+      httpsIo.use((socket, next) => {
+        const token = socket.handshake.auth.token;
+        if (!token) {
+          return next(new Error('Authentication error'));
+        }
+        
+        try {
+          const jwt = require('jsonwebtoken');
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+          socket.user = decoded;
+          next();
+        } catch (err) {
+          return next(new Error('Authentication error'));
+        }
+      });
+      
+      httpsIo.on('connection', (socket) => {
+        const userId = socket.user.userId;
+        logger.info(`User connected via HTTPS: ${userId}`);
+        
+        // Store the connection
+        connectedUsers.set(userId, socket.id);
+        
+        // Join rooms for user's conversations
+        socket.on('join-conversations', async (conversationIds) => {
+          if (Array.isArray(conversationIds)) {
+            conversationIds.forEach(id => {
+              socket.join(`conversation:${id}`);
+              logger.info(`User ${userId} joined conversation: ${id}`);
+            });
+          }
+        });
+        
+        // Handle sending messages - same as HTTP
+        socket.on('send-message', async (data) => {
+          try {
+            const { conversationId, content, recipientId } = data;
+            
+            if (!conversationId || !content) {
+              socket.emit('error', { message: 'Missing required fields' });
+              return;
+            }
+            
+            // Create message in database
+            const { v4: uuidv4 } = require('uuid');
+            const { dynamoDB, TABLES } = require('./config/aws');
+            
+            const messageId = uuidv4();
+            const message = {
+              messageId,
+              conversationId,
+              senderId: userId,
+              recipientId,
+              content,
+              timestamp: Date.now(),
+              isRead: false
+            };
+            
+            await dynamoDB.put({
+              TableName: TABLES.MESSAGES,
+              Item: message
+            }).promise();
+            
+            // Emit to all participants in the conversation
+            httpsIo.to(`conversation:${conversationId}`).emit('new-message', message);
+            
+            logger.info(`Message sent in conversation ${conversationId}`);
+          } catch (error) {
+            logger.error('Error sending message:', error);
+            socket.emit('error', { message: 'Failed to send message' });
+          }
+        });
+        
+        // Mark messages as read - same as HTTP
+        socket.on('mark-read', async (data) => {
+          try {
+            const { messageIds } = data;
+            
+            if (!messageIds || !Array.isArray(messageIds)) {
+              socket.emit('error', { message: 'Invalid message IDs' });
+              return;
+            }
+            
+            const { dynamoDB, TABLES } = require('./config/aws');
+            
+            // Update each message
+            const updatePromises = messageIds.map(messageId => {
+              return dynamoDB.update({
+                TableName: TABLES.MESSAGES,
+                Key: { messageId },
+                UpdateExpression: 'set isRead = :isRead',
+                ExpressionAttributeValues: {
+                  ':isRead': true
+                }
+              }).promise();
+            });
+            
+            await Promise.all(updatePromises);
+            
+            // Emit read status update to conversation participants
+            socket.to(`conversation:${data.conversationId}`).emit('messages-read', {
+              messageIds,
+              readBy: userId
+            });
+            
+            logger.info(`Messages marked as read by ${userId}`);
+          } catch (error) {
+            logger.error('Error marking messages as read:', error);
+            socket.emit('error', { message: 'Failed to mark messages as read' });
+          }
+        });
+        
+        // Handle user disconnect
+        socket.on('disconnect', () => {
+          connectedUsers.delete(userId);
+          logger.info(`User disconnected: ${userId}`);
+        });
+      });
+      
+      httpsServer.listen(HTTPS_PORT, HOST, () => {
         logger.info(`HTTPS Server running on https://${HOST}:${HTTPS_PORT} in ${process.env.NODE_ENV || 'development'} mode`);
+        logger.info(`WebSocket server initialized on HTTPS port as well`);
       });
       
       // Log connection URLs

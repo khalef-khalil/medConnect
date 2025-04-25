@@ -20,6 +20,9 @@ router.use('/schedules', require('./schedule.routes'));
 // Video routes
 router.use('/video', require('./video.routes'));
 
+// Messages routes
+router.use('/messages', require('./message.routes'));
+
 // Additional Appointment routes
 router.get('/doctors/:doctorId/availability', verifyToken, appointmentController.getDoctorAvailability);
 
