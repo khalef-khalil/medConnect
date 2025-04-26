@@ -3,6 +3,7 @@ export type NotificationType =
   | 'appointment_confirmed' 
   | 'appointment_cancelled' 
   | 'appointment_rejected'
+  | 'payment_refunded'
   | 'new_message';
 
 export interface Notification {

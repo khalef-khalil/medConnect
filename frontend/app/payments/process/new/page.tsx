@@ -66,13 +66,13 @@ export default function NewProcessPaymentPage() {
     const end = new Date(appointmentData.endTime);
     const durationMinutes = (end.getTime() - start.getTime()) / (1000 * 60);
     
-    // Base rate of $50 per 30 minutes
+    // Base rate of 50 TND per 30 minutes
     const baseRate = 50;
     return Math.ceil(durationMinutes / 30) * baseRate;
   };
 
   // Format currency
-  const formatCurrency = (amount: number, currency = 'USD') => {
+  const formatCurrency = (amount: number, currency = 'TND') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency

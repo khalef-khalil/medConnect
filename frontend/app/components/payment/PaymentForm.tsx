@@ -94,8 +94,9 @@ export default function PaymentForm({ appointmentId, amount, onSuccess }: Paymen
     
     // Process payment
     const paymentData = {
-      appointmentId,
-      amount,
+      appointmentId: appointmentId,
+      amount: amount,
+      currency: 'TND',
       cardNumber: cleanedCardNumber,
       cardExpiry,
       cardCvc,
@@ -323,7 +324,7 @@ export default function PaymentForm({ appointmentId, amount, onSuccess }: Paymen
             ) : (
               `Pay ${new Intl.NumberFormat('en-US', {
                 style: 'currency',
-                currency: 'USD'
+                currency: 'TND'
               }).format(amount)}`
             )}
           </motion.button>

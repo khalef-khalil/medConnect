@@ -114,7 +114,8 @@ export default function NewPaymentForm({ amount, doctorId, appointmentId, onSucc
           'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify({
-          amount,
+          amount: amount,
+          currency: 'TND',
           doctorId,
           appointmentId,
           cardNumber: cleanedCardNumber,
@@ -354,7 +355,7 @@ export default function NewPaymentForm({ amount, doctorId, appointmentId, onSucc
             ) : (
               `Pay ${new Intl.NumberFormat('en-US', {
                 style: 'currency',
-                currency: 'USD'
+                currency: 'TND'
               }).format(amount)}`
             )}
           </motion.button>

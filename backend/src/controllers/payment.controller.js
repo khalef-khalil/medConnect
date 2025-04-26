@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { dynamoDB, TABLES } = require('../config/aws');
 const { logger } = require('../utils/logger');
+const { createNotification } = require('./notification.controller');
 
 // Update the AWS config with a new PAYMENTS table
 if (!TABLES.PAYMENTS) {
@@ -81,7 +82,7 @@ exports.processPayment = async (req, res) => {
       patientId: userId,
       doctorId: appointment.doctorId,
       amount,
-      currency: 'USD',
+      currency: 'TND',
       paymentMethod: {
         type: 'creditCard',
         lastFour: cardNumber.slice(-4),
@@ -193,7 +194,7 @@ exports.newProcessPayment = async (req, res) => {
       patientId: userId,
       doctorId: validDoctorId,
       amount,
-      currency: 'USD',
+      currency: 'TND',
       paymentMethod: {
         type: 'creditCard',
         lastFour: cardNumber.slice(-4),
@@ -607,6 +608,15 @@ exports.refundPayment = async (req, res) => {
     };
     
     await dynamoDB.update(appointmentUpdateParams).promise();
+
+    // Notify the patient about the refund
+    await createNotification({
+      userId: payment.patientId,
+      type: 'payment_refunded',
+      title: 'Payment Refunded',
+      message: `Your payment of ${payment.amount} ${payment.currency} has been refunded. Reason: ${reason || 'No reason provided'}`,
+      relatedId: payment.appointmentId
+    });
 
     res.status(200).json({ 
       message: 'Payment refunded successfully',

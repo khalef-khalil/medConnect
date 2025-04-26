@@ -67,7 +67,7 @@ export default function FAQPage() {
         },
         {
           question: "How much does a visit cost without insurance?",
-          answer: "Without insurance, consultation costs vary depending on the type of visit and specialist. General practitioner visits typically range from $50-$75, while specialist consultations may range from $100-$200. You can see exact pricing when you book an appointment."
+          answer: "Without insurance, consultation costs vary depending on the type of visit and specialist. General practitioner visits typically range from 50-75 TND, while specialist consultations may range from 100-200 TND. You can see exact pricing when you book an appointment."
         },
         {
           question: "When will I be charged for my appointment?",

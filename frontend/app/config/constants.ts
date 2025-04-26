@@ -4,7 +4,7 @@ import { getApiUrl } from '../lib/networkUtils';
 export const API_URL = getApiUrl();
 
 // Default currency
-export const DEFAULT_CURRENCY = 'USD';
+export const DEFAULT_CURRENCY = 'TND';
 
 // Payment-related constants
 export const PAYMENT_STATUSES = {

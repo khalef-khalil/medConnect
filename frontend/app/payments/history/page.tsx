@@ -44,7 +44,7 @@ export default function PaymentHistoryPage() {
   };
   
   // Format currency
-  const formatCurrency = (amount: number, currency = 'USD') => {
+  const formatCurrency = (amount: number, currency = 'TND') => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency
