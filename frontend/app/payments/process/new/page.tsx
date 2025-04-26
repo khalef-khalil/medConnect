@@ -10,6 +10,7 @@ import { useDoctors } from '../../../hooks/useDoctors';
 import { useAuthStore } from '../../../store/authStore';
 import LoadingSpinner from '../../../components/ui/LoadingSpinner';
 import NewPaymentForm from '../../../components/payment/NewPaymentForm';
+import { v4 as uuidv4 } from 'uuid';
 
 export default function NewProcessPaymentPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function NewProcessPaymentPage() {
   const [appointmentData, setAppointmentData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<boolean>(false);
+  const [tempAppointmentId, setTempAppointmentId] = useState<string>('');
 
   // Load appointment data from localStorage
   useEffect(() => {
@@ -32,7 +34,15 @@ export default function NewProcessPaymentPage() {
         }
         
         const parsedData = JSON.parse(savedData);
+        
+        // Generate temporary appointment ID if not already present
+        if (!parsedData.appointmentId) {
+          parsedData.appointmentId = uuidv4();
+          localStorage.setItem('pendingAppointment', JSON.stringify(parsedData));
+        }
+        
         setAppointmentData(parsedData);
+        setTempAppointmentId(parsedData.appointmentId);
         
         // Also fetch doctor details
         if (parsedData.doctorId) {
@@ -82,6 +92,7 @@ export default function NewProcessPaymentPage() {
       // Add payment information to the appointment data
       const appointmentWithPayment = {
         ...appointmentData,
+        appointmentId: paymentResult.appointmentId,
         paymentStatus: 'paid'
       };
       
@@ -189,6 +200,8 @@ export default function NewProcessPaymentPage() {
                 <div className="md:col-span-2">
                   <NewPaymentForm 
                     amount={getAppointmentPrice()} 
+                    doctorId={appointmentData.doctorId}
+                    appointmentId={tempAppointmentId}
                     onSuccess={handlePaymentSuccess}
                   />
                 </div>

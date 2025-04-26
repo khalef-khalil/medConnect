@@ -290,7 +290,7 @@ exports.createAppointment = async (req, res) => {
     }
 
     // Create new appointment
-    const appointmentId = uuidv4();
+    const appointmentId = req.body.appointmentId || uuidv4();
     const timestamp = new Date().toISOString();
     
     // Determine appointment status based on payment status
@@ -316,6 +316,49 @@ exports.createAppointment = async (req, res) => {
       TableName: TABLES.APPOINTMENTS,
       Item: appointment
     }).promise();
+
+    // If an appointmentId was passed, check if there's an existing payment with this ID
+    // and update that payment to link it to this appointment
+    if (req.body.appointmentId) {
+      try {
+        // Check for any payments with this appointmentId
+        const paymentParams = {
+          TableName: TABLES.PAYMENTS,
+          IndexName: 'AppointmentIndex',
+          KeyConditionExpression: 'appointmentId = :appointmentId',
+          ExpressionAttributeValues: {
+            ':appointmentId': appointmentId
+          }
+        };
+        
+        const paymentResult = await dynamoDB.query(paymentParams).promise();
+        
+        if (paymentResult.Items && paymentResult.Items.length > 0) {
+          // Update appointment payment status based on payment record
+          const payment = paymentResult.Items[0];
+          
+          const updateAppointmentParams = {
+            TableName: TABLES.APPOINTMENTS,
+            Key: { appointmentId },
+            UpdateExpression: 'SET paymentStatus = :paymentStatus, status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeValues: {
+              ':paymentStatus': payment.status === 'completed' ? 'paid' : payment.status,
+              ':status': payment.status === 'completed' ? 'confirmed' : 'pending',
+              ':updatedAt': timestamp
+            }
+          };
+          
+          await dynamoDB.update(updateAppointmentParams).promise();
+          
+          // Also update the appointment object to return the latest status
+          appointment.paymentStatus = payment.status === 'completed' ? 'paid' : payment.status;
+          appointment.status = payment.status === 'completed' ? 'confirmed' : 'pending';
+        }
+      } catch (error) {
+        // Log the error but don't fail the appointment creation
+        logger.error('Error checking for existing payment:', error);
+      }
+    }
 
     res.status(201).json({ 
       message: 'Appointment created successfully',

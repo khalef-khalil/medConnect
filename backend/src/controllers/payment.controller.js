@@ -152,7 +152,8 @@ exports.newProcessPayment = async (req, res) => {
       cardCvc, 
       cardholderName,
       billingAddress,
-      doctorId // This might be passed from frontend
+      doctorId, // This might be passed from frontend
+      appointmentId // Add support for appointmentId
     } = req.body;
 
     // Validate required fields
@@ -170,7 +171,7 @@ exports.newProcessPayment = async (req, res) => {
     const timestamp = new Date().toISOString();
     
     // Check if doctorId is valid (if provided)
-    let validDoctorId = 'pending';
+    let validDoctorId = doctorId || 'pending';
     if (doctorId && doctorId !== 'pending') {
       try {
         const doctorParams = {
@@ -201,10 +202,15 @@ exports.newProcessPayment = async (req, res) => {
         cardholderName
       },
       billingAddress,
-      status: 'completed',
+      status: 'pending',
       createdAt: timestamp,
       updatedAt: timestamp
     };
+    
+    // Add appointmentId to payment if provided
+    if (appointmentId) {
+      payment.appointmentId = appointmentId;
+    }
 
     // Store payment in database
     const params = {

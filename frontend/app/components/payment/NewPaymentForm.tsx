@@ -6,10 +6,11 @@ import { useAuth } from '../../hooks/useAuth';
 interface NewPaymentFormProps {
   amount: number;
   doctorId?: string;
+  appointmentId?: string;
   onSuccess: (paymentResult: any) => void;
 }
 
-export default function NewPaymentForm({ amount, doctorId, onSuccess }: NewPaymentFormProps) {
+export default function NewPaymentForm({ amount, doctorId, appointmentId, onSuccess }: NewPaymentFormProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { authToken } = useAuth();
@@ -115,6 +116,7 @@ export default function NewPaymentForm({ amount, doctorId, onSuccess }: NewPayme
         body: JSON.stringify({
           amount,
           doctorId,
+          appointmentId,
           cardNumber: cleanedCardNumber,
           cardExpiry,
           cardCvc,
