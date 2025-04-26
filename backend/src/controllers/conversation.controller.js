@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { dynamoDB, TABLES } = require('../config/aws');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger').logger;
+const { createNotification } = require('./notification.controller');
 
 /**
  * Get all conversations for a user (either patient or doctor)
@@ -287,6 +288,27 @@ exports.sendMessage = async (req, res) => {
       TableName: TABLES.MESSAGES,
       Item: message
     }).promise();
+    
+    // Get sender details for notification
+    const senderParams = {
+      TableName: TABLES.USERS,
+      Key: { userId }
+    };
+    
+    const senderResult = await dynamoDB.get(senderParams).promise();
+    const sender = senderResult.Item || {};
+    const senderName = sender.firstName && sender.lastName 
+      ? `${sender.firstName} ${sender.lastName}`
+      : 'Someone';
+    
+    // Create notification for message recipient
+    await createNotification({
+      userId: recipientId,
+      type: 'new_message',
+      title: 'New Message',
+      message: `${senderName} sent you a new message`,
+      relatedId: conversationId
+    });
     
     res.status(201).json(message);
   } catch (error) {

@@ -32,7 +32,8 @@ const TABLES = {
   MESSAGES: process.env.DYNAMODB_CHAT_TABLE || 'medconnect_messages',
   PAYMENTS: process.env.DYNAMODB_PAYMENT_TABLE || 'medconnect_payments',
   ENCRYPTION_KEYS: process.env.DYNAMODB_ENCRYPTION_KEYS_TABLE || 'medconnect_encryption_keys',
-  DOCTOR_SCHEDULES: process.env.DYNAMODB_DOCTOR_SCHEDULES_TABLE || 'medconnect_doctor_schedules'
+  DOCTOR_SCHEDULES: process.env.DYNAMODB_DOCTOR_SCHEDULES_TABLE || 'medconnect_doctor_schedules',
+  NOTIFICATIONS: process.env.DYNAMODB_NOTIFICATIONS_TABLE || 'medconnect_notifications'
 };
 
 // Initialize S3 bucket configuration
@@ -176,6 +177,29 @@ const initializeDynamoDB = async () => {
           KeySchema: [
             { AttributeName: 'doctorId', KeyType: 'HASH' },
             { AttributeName: 'dayOfWeek', KeyType: 'RANGE' }
+          ],
+          Projection: { ProjectionType: 'ALL' },
+          ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+        }
+      ],
+      ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+    });
+    
+    // Check and create Notifications table
+    await ensureTableExists(dynamoDBClient, {
+      TableName: TABLES.NOTIFICATIONS,
+      KeySchema: [{ AttributeName: 'notificationId', KeyType: 'HASH' }],
+      AttributeDefinitions: [
+        { AttributeName: 'notificationId', AttributeType: 'S' },
+        { AttributeName: 'userId', AttributeType: 'S' },
+        { AttributeName: 'timestamp', AttributeType: 'N' }
+      ],
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: 'UserNotificationsIndex',
+          KeySchema: [
+            { AttributeName: 'userId', KeyType: 'HASH' },
+            { AttributeName: 'timestamp', KeyType: 'RANGE' }
           ],
           Projection: { ProjectionType: 'ALL' },
           ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }

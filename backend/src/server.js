@@ -11,6 +11,13 @@ const { logger } = require('./utils/logger');
 const { initializeResources } = require('./utils/init');
 const { getPrimaryLocalIpAddress, logNetworkInterfaces } = require('./utils/network');
 const routes = require('./routes');
+const userRoutes = require('./routes/user.routes');
+const appointmentRoutes = require('./routes/appointment.routes');
+const messageRoutes = require('./routes/message.routes');
+const videoRoutes = require('./routes/video.routes');
+const paymentRoutes = require('./routes/payment.routes');
+const scheduleRoutes = require('./routes/schedule.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 // Initialize express app
 const app = express();
@@ -53,7 +60,20 @@ app.use((req, res, next) => {
 
 // API routes
 const apiPrefix = process.env.API_PREFIX || '/api';
-app.use(`${apiPrefix}/${process.env.API_VERSION || 'v1'}`, routes);
+const apiVersion = process.env.API_VERSION || 'v1';
+const fullApiPrefix = `${apiPrefix}/${apiVersion}`;
+
+// Main routes
+app.use(fullApiPrefix, routes);
+
+// Individual routes with versioning
+app.use(`${fullApiPrefix}/users`, userRoutes);
+app.use(`${fullApiPrefix}/appointments`, appointmentRoutes);
+app.use(`${fullApiPrefix}/chat`, messageRoutes);
+app.use(`${fullApiPrefix}/video`, videoRoutes);
+app.use(`${fullApiPrefix}/payments`, paymentRoutes);
+app.use(`${fullApiPrefix}/schedule`, scheduleRoutes);
+app.use(`${fullApiPrefix}/notifications`, notificationRoutes);
 
 // Health check endpoint - moved outside the API routes to be directly accessible
 app.get('/health', (req, res) => {
@@ -61,7 +81,7 @@ app.get('/health', (req, res) => {
 });
 
 // Also add the health check at the API root level for compatibility with the frontend
-app.get(`${apiPrefix}/${process.env.API_VERSION || 'v1'}/health`, (req, res) => {
+app.get(`${fullApiPrefix}/health`, (req, res) => {
   res.status(200).json({ status: 'ok', environment: process.env.NODE_ENV });
 });
 
@@ -151,6 +171,7 @@ app.use((err, req, res, next) => {
           // Create message in database
           const { v4: uuidv4 } = require('uuid');
           const { dynamoDB, TABLES } = require('./config/aws');
+          const { createNotification } = require('./controllers/notification.controller');
           
           const messageId = uuidv4();
           const message = {
@@ -167,6 +188,27 @@ app.use((err, req, res, next) => {
             TableName: TABLES.MESSAGES,
             Item: message
           }).promise();
+          
+          // Get sender details for notification
+          const senderParams = {
+            TableName: TABLES.USERS,
+            Key: { userId }
+          };
+          
+          const senderResult = await dynamoDB.get(senderParams).promise();
+          const sender = senderResult.Item || {};
+          const senderName = sender.firstName && sender.lastName 
+            ? `${sender.firstName} ${sender.lastName}`
+            : 'Someone';
+          
+          // Create notification for message recipient
+          await createNotification({
+            userId: recipientId,
+            type: 'new_message',
+            title: 'New Message',
+            message: `${senderName} sent you a new message`,
+            relatedId: conversationId
+          });
           
           // Emit to all participants in the conversation
           io.to(`conversation:${conversationId}`).emit('new-message', message);
@@ -299,6 +341,7 @@ app.use((err, req, res, next) => {
             // Create message in database
             const { v4: uuidv4 } = require('uuid');
             const { dynamoDB, TABLES } = require('./config/aws');
+            const { createNotification } = require('./controllers/notification.controller');
             
             const messageId = uuidv4();
             const message = {
@@ -315,6 +358,27 @@ app.use((err, req, res, next) => {
               TableName: TABLES.MESSAGES,
               Item: message
             }).promise();
+            
+            // Get sender details for notification
+            const senderParams = {
+              TableName: TABLES.USERS,
+              Key: { userId }
+            };
+            
+            const senderResult = await dynamoDB.get(senderParams).promise();
+            const sender = senderResult.Item || {};
+            const senderName = sender.firstName && sender.lastName 
+              ? `${sender.firstName} ${sender.lastName}`
+              : 'Someone';
+            
+            // Create notification for message recipient
+            await createNotification({
+              userId: recipientId,
+              type: 'new_message',
+              title: 'New Message',
+              message: `${senderName} sent you a new message`,
+              relatedId: conversationId
+            });
             
             // Emit to all participants in the conversation
             httpsIo.to(`conversation:${conversationId}`).emit('new-message', message);

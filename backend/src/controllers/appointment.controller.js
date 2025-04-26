@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { dynamoDB, TABLES } = require('../config/aws');
-const { logger } = require('../utils/logger');
+const logger = require('../utils/logger').logger;
+const { createNotification } = require('./notification.controller');
 
 /**
  * Get all appointments for the logged-in user based on their role
@@ -317,6 +318,15 @@ exports.createAppointment = async (req, res) => {
       Item: appointment
     }).promise();
 
+    // Create notification for doctor
+    await createNotification({
+      userId: doctorId,
+      type: 'appointment_created',
+      title: 'New Appointment Request',
+      message: `You have a new appointment request from ${patientResult.Item.firstName} ${patientResult.Item.lastName}`,
+      relatedId: appointmentId
+    });
+
     // If an appointmentId was passed, check if there's an existing payment with this ID
     // and update that payment to link it to this appointment
     if (req.body.appointmentId) {
@@ -481,6 +491,48 @@ exports.updateAppointment = async (req, res) => {
       const updateResult = await dynamoDB.update(updateParams).promise();
       const updatedAppointment = updateResult.Attributes;
 
+      // Create notifications based on status change
+      if (status === 'confirmed') {
+        // Notify patient when appointment is confirmed
+        await createNotification({
+          userId: appointment.patientId,
+          type: 'appointment_confirmed',
+          title: 'Appointment Confirmed',
+          message: `Your appointment scheduled for ${new Date(appointment.startTime).toLocaleString()} has been confirmed`,
+          relatedId: appointmentId
+        });
+      } else if (status === 'cancelled') {
+        // If doctor cancelled
+        if (role === 'doctor') {
+          await createNotification({
+            userId: appointment.patientId,
+            type: 'appointment_cancelled',
+            title: 'Appointment Cancelled',
+            message: `Your appointment scheduled for ${new Date(appointment.startTime).toLocaleString()} has been cancelled by the doctor`,
+            relatedId: appointmentId
+          });
+        } 
+        // If patient or admin cancelled
+        else {
+          await createNotification({
+            userId: appointment.doctorId,
+            type: 'appointment_cancelled',
+            title: 'Appointment Cancelled',
+            message: `The appointment scheduled for ${new Date(appointment.startTime).toLocaleString()} has been cancelled`,
+            relatedId: appointmentId
+          });
+        }
+      } else if (status === 'rejected') {
+        // Notify patient when appointment is rejected
+        await createNotification({
+          userId: appointment.patientId,
+          type: 'appointment_rejected',
+          title: 'Appointment Rejected',
+          message: `Your appointment request for ${new Date(appointment.startTime).toLocaleString()} has been rejected`,
+          relatedId: appointmentId
+        });
+      }
+
       return res.status(200).json({
         message: 'Appointment updated successfully',
         appointment: updatedAppointment
@@ -522,13 +574,44 @@ exports.deleteAppointment = async (req, res) => {
       return res.status(403).json({ message: 'You do not have permission to delete this appointment' });
     }
 
-    // Delete the appointment
-    await dynamoDB.delete({
+    // Instead of deleting, update status to 'cancelled'
+    const updateParams = {
       TableName: TABLES.APPOINTMENTS,
-      Key: { appointmentId }
-    }).promise();
+      Key: { appointmentId },
+      UpdateExpression: 'set #status = :status, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status'
+      },
+      ExpressionAttributeValues: {
+        ':status': 'cancelled',
+        ':updatedAt': new Date().toISOString()
+      }
+    };
+    
+    await dynamoDB.update(updateParams).promise();
+    
+    // Create notification based on who cancelled
+    if (role === 'patient' || (role === 'admin' && userId !== appointment.doctorId)) {
+      // Notify doctor when patient cancels
+      await createNotification({
+        userId: appointment.doctorId,
+        type: 'appointment_cancelled',
+        title: 'Appointment Cancelled',
+        message: `An appointment scheduled for ${new Date(appointment.startTime).toLocaleString()} has been cancelled by the patient`,
+        relatedId: appointmentId
+      });
+    } else {
+      // Notify patient when doctor cancels
+      await createNotification({
+        userId: appointment.patientId,
+        type: 'appointment_cancelled',
+        title: 'Appointment Cancelled',
+        message: `Your appointment scheduled for ${new Date(appointment.startTime).toLocaleString()} has been cancelled by the doctor`,
+        relatedId: appointmentId
+      });
+    }
 
-    res.status(200).json({ message: 'Appointment successfully deleted' });
+    res.status(200).json({ message: 'Appointment cancelled successfully' });
   } catch (error) {
     logger.error('Error in deleteAppointment function:', error);
     res.status(500).json({ message: 'Server error' });

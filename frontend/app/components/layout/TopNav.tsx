@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../store/authStore';
 import { useAuth } from '../../hooks/useAuth';
+import NotificationDropdown from '../notifications/NotificationDropdown';
 
 export default function TopNav() {
   const { user } = useAuthStore();
@@ -64,6 +65,9 @@ export default function TopNav() {
         </div>
         
         <div className="flex items-center ml-auto space-x-1 md:space-x-4">
+          {/* Notification dropdown */}
+          <NotificationDropdown />
+          
           {/* User profile dropdown */}
           <div className="relative" ref={menuRef}>
             <button 
@@ -90,16 +94,14 @@ export default function TopNav() {
             
             {/* Dropdown menu */}
             {userMenuOpen && (
-              <div className="absolute right-0 mt-2 w-44 md:w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+              <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
                 <Link href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                  Profile
+                  Profile Settings
                 </Link>
-                <Link href="/settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                  Settings
-                </Link>
-                <button 
-                  className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                
+                <button
                   onClick={handleLogout}
+                  className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                 >
                   Sign out
                 </button>
