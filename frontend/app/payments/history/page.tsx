@@ -1,17 +1,24 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import AuthLayout from '../../components/layout/AuthLayout';
 import { usePayments } from '../../hooks/usePayments';
 import { useAuthStore } from '../../store/authStore';
 import LoadingSpinner from '../../components/ui/LoadingSpinner';
+import axios from 'axios';
+import { API_URL } from '../../config/constants';
+import { useToast } from '../../hooks/useToast';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function PaymentHistoryPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { payments, loading, error, getPaymentHistory } = usePayments();
+  const { showToast } = useToast();
+  const { authToken } = useAuth();
+  const [processingRefund, setProcessingRefund] = useState<string | null>(null);
   
   // Add a ref to track if we've already fetched data
   const dataFetchedRef = React.useRef(false);
@@ -43,23 +50,54 @@ export default function PaymentHistoryPage() {
       currency: currency
     }).format(amount);
   };
-  
+
   // Get status badge style
-  const getStatusBadgeClass = (status: string) => {
+  const getAppointmentStatusClass = (status: string) => {
     switch (status) {
-      case 'completed':
+      case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-200';
       case 'pending':
+      case 'scheduled':
         return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'failed':
+      case 'cancelled':
         return 'bg-red-100 text-red-800 border-red-200';
-      case 'refunded':
-        return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'completed':
+        return 'bg-blue-100 text-blue-800 border-blue-200';
       default:
         return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
+  // Handle refund functionality
+  const handleRefund = async (paymentId: string) => {
+    if (!confirm('Are you sure you want to refund this payment?')) return;
+    
+    setProcessingRefund(paymentId);
+    
+    try {
+      const config = {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        }
+      };
+      
+      await axios.post(
+        `${API_URL}/payments/${paymentId}/refund`,
+        { reason: 'Appointment cancelled' },
+        config
+      );
+      
+      showToast('Payment refunded successfully', 'success');
+      getPaymentHistory(); // Refresh payment history
+    } catch (err: any) {
+      console.error('Error refunding payment:', err);
+      showToast(err.response?.data?.message || 'Error refunding payment', 'error');
+    } finally {
+      setProcessingRefund(null);
+    }
+  };
+  
   return (
     <AuthLayout>
       <div className="p-4 md:p-8">
@@ -156,6 +194,11 @@ export default function PaymentHistoryPage() {
                         <tr key={payment.paymentId} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{formatDate(payment.createdAt)}</div>
+                            {payment.refundedAt && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                Refunded: {formatDate(payment.refundedAt)}
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {payment.userDetails ? (
@@ -233,17 +276,41 @@ export default function PaymentHistoryPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full border ${getStatusBadgeClass(payment.status)}`}>
-                              {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
-                            </span>
+                            {payment.status === 'refunded' ? (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full border bg-orange-100 text-orange-800 border-orange-200">
+                                Refunded
+                              </span>
+                            ) : payment.appointmentDetails ? (
+                              <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full border ${getAppointmentStatusClass(payment.appointmentDetails.status)}`}>
+                                {payment.appointmentDetails.status.charAt(0).toUpperCase() + payment.appointmentDetails.status.slice(1)}
+                              </span>
+                            ) : (
+                              <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full border bg-gray-100 text-gray-800 border-gray-200">
+                                Unknown
+                              </span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <button
-                              onClick={() => router.push(`/appointments/${payment.appointmentId}`)}
-                              className="text-primary-600 hover:text-primary-900"
-                            >
-                              View Appointment
-                            </button>
+                            <div className="flex flex-col space-y-2">
+                              <button
+                                onClick={() => router.push(`/appointments/${payment.appointmentId}`)}
+                                className="text-primary-600 hover:text-primary-900"
+                              >
+                                View Appointment
+                              </button>
+                              
+                              {user?.role === 'doctor' && 
+                               payment.status !== 'refunded' && 
+                               payment.appointmentDetails?.status === 'cancelled' && (
+                                <button
+                                  onClick={() => handleRefund(payment.paymentId)}
+                                  disabled={processingRefund === payment.paymentId}
+                                  className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                                >
+                                  {processingRefund === payment.paymentId ? 'Processing...' : 'Refund Payment'}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

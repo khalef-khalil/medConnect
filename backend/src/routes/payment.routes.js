@@ -25,7 +25,7 @@ router.get('/appointment/:appointmentId', paymentController.getPaymentsByAppoint
 // Update payment status (admin only)
 router.put('/:paymentId/status', roleMiddleware.isAdmin, paymentController.updatePaymentStatus);
 
-// Refund a payment (admin only)
-router.post('/:paymentId/refund', roleMiddleware.isAdmin, paymentController.refundPayment);
+// Refund a payment (doctors and admins)
+router.post('/:paymentId/refund', roleMiddleware.hasRole(['admin', 'doctor']), paymentController.refundPayment);
 
 module.exports = router; 

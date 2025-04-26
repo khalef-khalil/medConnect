@@ -542,12 +542,13 @@ exports.updatePaymentStatus = async (req, res) => {
 };
 
 /**
- * Refund a payment (admin only)
+ * Refund a payment (admin or doctor)
  */
 exports.refundPayment = async (req, res) => {
   try {
     const { paymentId } = req.params;
     const { reason } = req.body;
+    const { userId, role } = req.user;
 
     // Get the current payment
     const getParams = {
@@ -562,6 +563,11 @@ exports.refundPayment = async (req, res) => {
     }
 
     const payment = result.Item;
+    
+    // Check permissions: admin can refund any payment, doctors can only refund their own patients' payments
+    if (role === 'doctor' && payment.doctorId !== userId) {
+      return res.status(403).json({ message: 'You can only refund payments for your own patients' });
+    }
     
     if (payment.status === 'refunded') {
       return res.status(400).json({ message: 'Payment has already been refunded' });
